@@ -15,12 +15,13 @@ import Settings from './pages/Settings';
 import ApprovalLevels from './pages/ApprovalLevels';
 import AccrualHistory from './pages/AccrualHistory';
 
-export default function AdminApp({ onSwitchRole }: { onSwitchRole?: (role: 'employee' | 'admin') => void }) {
+export default function AdminApp({ onLogout }: { onLogout?: () => void }) {
   return (
     <AdminProvider>
-      <AdminLayout onSwitchRole={onSwitchRole}>
+      <AdminLayout onLogout={onLogout}>
         <Routes>
-          <Route path="/" element={<AdminDashboard />} />
+          <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/dashboard" element={<AdminDashboard />} />
           <Route path="/employees" element={<EmployeeList />} />
           <Route path="/leaves" element={<LeaveRequests />} />
           <Route path="/balances" element={<BalanceManagement />} />
@@ -34,7 +35,7 @@ export default function AdminApp({ onSwitchRole }: { onSwitchRole?: (role: 'empl
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/admin" replace />} />
+          <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Routes>
       </AdminLayout>
     </AdminProvider>

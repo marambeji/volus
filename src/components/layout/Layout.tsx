@@ -7,10 +7,9 @@ import Chatbot from '../ui/Chatbot';
 interface LayoutProps {
   children: ReactNode;
   onLogout?: () => void;
-  onSwitchRole?: (role: 'employee' | 'admin') => void;
 }
 
-export default function Layout({ children, onLogout, onSwitchRole }: LayoutProps) {
+export default function Layout({ children, onLogout }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true';
@@ -25,10 +24,15 @@ export default function Layout({ children, onLogout, onSwitchRole }: LayoutProps
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
+  const currentUser = JSON.parse(
+    localStorage.getItem('currentUser') || 
+    '{"name":"Gabriel Habre","email":"gabriel.habre@novelus.com","role":"employee","avatar":"GH"}'
+  );
+
   return (
     <div className="min-h-screen bg-white dark:bg-[#0f172a] flex text-slate-800 dark:text-slate-200 transition-colors duration-200">
       {/* Sidebar Navigation */}
-      <Navbar isOpen={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={onLogout} onSwitchRole={onSwitchRole} />
+      <Navbar isOpen={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={onLogout} />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
@@ -38,7 +42,7 @@ export default function Layout({ children, onLogout, onSwitchRole }: LayoutProps
           <div className="flex items-center gap-4">
             <button
               onClick={() => setMobileOpen(true)}
-              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer"
             >
               <Menu size={20} />
             </button>
@@ -67,18 +71,20 @@ export default function Layout({ children, onLogout, onSwitchRole }: LayoutProps
             {/* User Avatar Info */}
             <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-xs font-black shadow-xs">
-                GH
+                {currentUser.avatar}
               </div>
               <div className="text-left hidden sm:block">
-                <p className="text-xs font-bold text-slate-800 leading-tight">Gabriel H.</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider leading-tight">Admin</p>
+                <p className="text-xs font-bold text-slate-800 leading-tight">{currentUser.name}</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider leading-tight capitalize">{currentUser.role}</p>
               </div>
             </div>
 
             {/* Logout */}
-            <button onClick={onLogout} className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors cursor-pointer ml-1" title="Logout">
-              <LogOut size={18} />
-            </button>
+            {onLogout && (
+              <button onClick={onLogout} className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors cursor-pointer ml-1" title="Logout">
+                <LogOut size={18} />
+              </button>
+            )}
           </div>
         </header>
 

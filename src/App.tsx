@@ -9,42 +9,80 @@ import FullCalendar from './pages/FullCalendar';
 import Login from './pages/Login';
 import AdminApp from './admin/AdminApp';
 
-export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [role, setRole] = useState<'employee' | 'admin'>('employee');
+interface UserSession {
+  id: number;
+  name: string;
+  email: string;
+  role: 'admin' | 'manager' | 'employee';
+  avatar: string;
+}
 
-  const handleLogin = (selectedRole: 'employee' | 'admin' = 'employee') => {
-    setRole(selectedRole);
-    setIsAuthenticated(true);
+export default function App() {
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
+    const stored = localStorage.getItem('currentUser');
+    return stored ? JSON.parse(stored) : null;
+  });
+
+  const handleLogin = (user: UserSession) => {
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    setCurrentUser(user);
   };
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
+    localStorage.removeItem('currentUser');
+    setCurrentUser(null);
   };
 
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
+  // 1. Unauthenticated Routing Block
+  if (!currentUser) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login onLogin={handleLogin} />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Router>
+    );
   }
 
+  // 2. Authenticated State: HR Admin Routing Block
+  if (currentUser.role === 'admin') {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/admin/*" element={<AdminApp onLogout={handleLogout} />} />
+          {/* Prevent HR Admin from opening employee routes by redirecting to /admin/dashboard */}
+          <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+        </Routes>
+      </Router>
+    );
+  }
+
+  // 3. Authenticated State: Employee / Manager Routing Block
   return (
     <Router>
-      {role === 'admin' ? (
+      <Layout onLogout={handleLogout}>
         <Routes>
-          <Route path="/admin/*" element={<AdminApp onSwitchRole={setRole} />} />
-          <Route path="*" element={<Navigate to="/admin" replace />} />
+          <Route path="/" element={<Navigate to="/employee/dashboard" replace />} />
+          <Route path="/employee/dashboard" element={<Home />} />
+          <Route path="/employee/my-info" element={<MyInfo />} />
+          <Route path="/employee/people" element={<People />} />
+          
+          {/* Protect Route: prevent employees (non-managers) from opening /employee/approval-dashboard */}
+          <Route 
+            path="/employee/approval-dashboard" 
+            element={
+              currentUser.role === 'manager' 
+                ? <ApprovalDashboard /> 
+                : <Navigate to="/employee/dashboard" replace />
+            } 
+          />
+          <Route path="/employee/full-calendar" element={<FullCalendar />} />
+          
+          {/* Redirect any other manually typed URL or admin URL to employee dashboard */}
+          <Route path="*" element={<Navigate to="/employee/dashboard" replace />} />
         </Routes>
-      ) : (
-        <Layout onLogout={handleLogout} onSwitchRole={setRole}>
-          <Routes>
-            <Route path="/"                   element={<Home />} />
-            <Route path="/my-info"            element={<MyInfo />} />
-            <Route path="/people"             element={<People />} />
-            <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
-            <Route path="/full-calendar"      element={<FullCalendar />} />
-            <Route path="*"                   element={<Navigate to="/" replace />} />
-          </Routes>
-        </Layout>
-      )}
+      </Layout>
     </Router>
   );
 }

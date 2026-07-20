@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Mail, Lock, ShieldAlert, XCircle, ArrowLeft } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (role: 'employee' | 'admin') => void;
+  onLogin: (user: { id: number; name: string; email: string; role: 'admin' | 'manager' | 'employee'; avatar: string }) => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
@@ -24,21 +24,42 @@ export default function Login({ onLogin }: LoginProps) {
       return;
     }
 
-    if (email === 'admin@novelus.com' && password === 'admin') {
-      setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
-        onLogin('admin');
-      }, 1000);
-    } else if (email === 'gabriel.habre@novelus.com' && password === 'admin') {
-      setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
-        onLogin('employee');
-      }, 1000);
-    } else {
+    if (password !== 'admin') {
       setError('Invalid credentials.');
+      return;
     }
+
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      if (email === 'admin@novelus.com') {
+        onLogin({
+          id: 100,
+          name: 'HR Admin',
+          email: 'admin@novelus.com',
+          role: 'admin',
+          avatar: 'HR'
+        });
+      } else if (email === 'riad.mansour@novelus.com') {
+        onLogin({
+          id: 10,
+          name: 'Riad Mansour',
+          email: 'riad.mansour@novelus.com',
+          role: 'manager',
+          avatar: 'RM'
+        });
+      } else if (email === 'gabriel.habre@novelus.com') {
+        onLogin({
+          id: 1,
+          name: 'Gabriel Habre',
+          email: 'gabriel.habre@novelus.com',
+          role: 'employee',
+          avatar: 'GH'
+        });
+      } else {
+        setError('Invalid credentials.');
+      }
+    }, 1000);
   }
 
   function handleForgotPassword(e: React.FormEvent) {
@@ -50,6 +71,11 @@ export default function Login({ onLogin }: LoginProps) {
       setForgotOpen(false);
       setForgotEmail('');
     }, 2500);
+  }
+
+  function fillCredentials(mail: string) {
+    setEmail(mail);
+    setPassword('admin');
   }
 
   return (
@@ -93,7 +119,7 @@ export default function Login({ onLogin }: LoginProps) {
           </button>
         </div>
 
-        {/* Step 2: Access Portal Card (styled like the SECURANET card in screen) */}
+        {/* Step 2: Access Portal Card */}
         <div
           className={`w-full bg-[#0a1526]/80 backdrop-blur-xl border border-cyan-500/30 p-8 rounded-2xl shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col items-center relative transition-all duration-500 transform ${
             step === 'form' ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4 pointer-events-none'
@@ -184,10 +210,17 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
 
           {/* Tip banner */}
-          <div className="mt-6 text-[10px] text-slate-500 border-t border-slate-800/60 pt-4 w-full text-center">
-            💡 Employee: <span className="font-mono text-slate-400">gabriel.habre@novelus.com</span> / <span className="font-mono text-slate-400">admin</span>
-            <br/>
-            🛡️ HR Admin: <span className="font-mono text-slate-400">admin@novelus.com</span> / <span className="font-mono text-slate-400">admin</span>
+          <div className="mt-6 text-[10px] text-slate-500 border-t border-slate-800/60 pt-4 w-full text-center space-y-1.5">
+            <p className="text-slate-400 font-bold mb-1">Click below to auto-fill:</p>
+            <div onClick={() => fillCredentials('gabriel.habre@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
+              💡 <strong>Employee</strong>: <span className="font-mono text-cyan-400 underline">gabriel.habre@novelus.com</span>
+            </div>
+            <div onClick={() => fillCredentials('riad.mansour@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
+              💼 <strong>Manager</strong>: <span className="font-mono text-cyan-400 underline">riad.mansour@novelus.com</span>
+            </div>
+            <div onClick={() => fillCredentials('admin@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
+              🛡️ <strong>HR Admin</strong>: <span className="font-mono text-cyan-400 underline">admin@novelus.com</span>
+            </div>
           </div>
         </div>
 

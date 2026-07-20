@@ -8,10 +8,11 @@ import { leaveRequestsList, employeesList, leaveTypesList, leaveBalancesList } f
 export default function ApprovalDashboard() {
   const [activeTab, setActiveTab] = useState<'requests' | 'directs'>('requests');
   const [requests, setRequests] = useState(leaveRequestsList);
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{"id":1}');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // direct reports of Gabriel (acting manager here)
-  const directReports = employeesList.filter((emp) => emp.managerId === 1);
+  // direct reports of the logged-in manager
+  const directReports = employeesList.filter((emp) => emp.managerId === currentUser.id);
 
   // Filter pending requests for direct reports
   const pendingRequests = requests.filter(
@@ -153,7 +154,7 @@ export default function ApprovalDashboard() {
                     <td className="py-3 px-4 font-mono text-xs text-slate-400">#00{rep.id}</td>
                     <td className="py-3 px-4 font-bold text-slate-700">{rep.name}</td>
                     {leaveTypesList.map((type) => {
-                      const balance = leaveBalancesList.find((b) => b.employeeId === 1 && b.leaveType === type.key); // Simulate for directs
+                      const balance = leaveBalancesList.find((b) => b.employeeId === rep.id && b.leaveType === type.key); // Simulate for directs
                       const amount = balance ? balance.amount : 0;
                       return (
                         <td key={type.key} className="py-3 px-4 text-center font-semibold text-slate-600">
