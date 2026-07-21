@@ -32,10 +32,10 @@ export default function LeaveRequests() {
   
   // Modals & Selection
   const [selected, setSelected] = useState<AdminLeaveRequest | null>(null);
-  const [rejectId, setRejectId] = useState<number | null>(null);
+  const [rejectId, setRejectId] = useState<number | string | null>(null);
   const [rejectComment, setRejectComment] = useState('');
   const [hrNote, setHrNote] = useState('');
-  const [noteId, setNoteId] = useState<number | null>(null);
+  const [noteId, setNoteId] = useState<number | string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const departments = [...new Set(state.employees.map(e => e.department))];
@@ -80,7 +80,7 @@ export default function LeaveRequests() {
     a.click();
   }
 
-  function handleApprove(id: number) {
+  function handleApprove(id: number | string) {
     const req = state.leaveRequests.find(r => r.id === id);
     if (!req) return;
     

@@ -18,5 +18,9 @@ export async function getLeaveTypes(
     `/leave-types?limit=${limit}`,
     { signal }
   );
-  return res.data;
+  return res.data.filter(
+    (lt) =>
+      !lt.key.toLowerCase().startsWith('e2e') &&
+      !lt.label.toLowerCase().startsWith('e2e')
+  );
 }

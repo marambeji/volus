@@ -11,6 +11,9 @@ import { LeaveTypesModule } from './modules/leave-types/leave-types.module';
 import { ApprovalWorkflowsModule } from './modules/approval-workflows/approval-workflows.module';
 import { PublicHolidaysModule } from './modules/public-holidays/public-holidays.module';
 import { PoliciesModule } from './modules/policies/policies.module';
+import { EmployeesModule } from './modules/employees/employees.module';
+import { LeaveBalancesModule } from './modules/leave-balances/leave-balances.module';
+import { LeaveRequestsModule } from './modules/leave-requests/leave-requests.module';
 
 import * as path from 'path';
 
@@ -33,6 +36,9 @@ import * as path from 'path';
     ApprovalWorkflowsModule,
     PublicHolidaysModule,
     PoliciesModule,
+    EmployeesModule,
+    LeaveBalancesModule,
+    LeaveRequestsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

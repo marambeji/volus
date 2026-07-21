@@ -24,13 +24,15 @@ export interface SeniorityMilestone {
 
 // ─── Country Policy ─────────────────────────────────────────────────────────
 export interface LeaveQuota {
-  leaveType: LeaveTypeKey;
+  leaveTypeId?: string;
+  leaveType: LeaveTypeKey | string;
   entitlementDays: number;  // days per year
   isAccrued: boolean;
   accrualRate?: number;     // days per month if accrued
   carryOverEnabled: boolean;
   maxCarryOver: number;     // max days to carry to next year
-  maxConsecutive: number;   // max consecutive days allowed
+  maxConsecutive?: number;   // max consecutive days allowed
+  maxConsecutiveDays?: number | null;
   minNoticeDays: number;    // min days notice required
   // New fields
   accrualInterval?: 'monthly' | 'yearly' | 'custom';
@@ -40,10 +42,18 @@ export interface LeaveQuota {
   isCutOffDifferentFromHireDate?: boolean;
   cutOffDate?: string;
   carryOverExpiration?: string;
-  maxBalanceCap?: number;
+  maxBalanceCap?: number | null;
   resetDate?: string;       // MM-DD
   resetDaysCount?: number;
   waitingPeriodDays?: number;
+  // Dynamic rule configuration
+  allowsHalfDay?: boolean;
+  requiresNote?: boolean;
+  requiresDocument?: boolean;
+  requiresPositiveBalance?: boolean;
+  minRequestDays?: number;
+  maxRequestDays?: number | null;
+  allowedCountries?: string[] | null;
 }
 
 export interface CountryPolicy {
@@ -69,7 +79,7 @@ export interface EmergencyContact {
 }
 
 export interface AdminEmployee {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
   phone?: string;
@@ -77,7 +87,7 @@ export interface AdminEmployee {
   position: string;
   department: string;
   unit: string;
-  managerId?: number;
+  managerId?: number | string;
   country: string;
   countryCode: string;
   hireDate: string;
@@ -155,19 +165,19 @@ export type NotificationType =
   | 'policy_changed';
 
 export interface AdminNotification {
-  id: number;
+  id: number | string;
   type: NotificationType;
   title: string;
   message: string;
-  employeeId?: number;
+  employeeId?: number | string;
   read: boolean;
   timestamp: string;
 }
 
 // ─── Extended Leave Request (admin view) ────────────────────────────────────
 export interface AdminLeaveRequest {
-  id: number;
-  employeeId: number;
+  id: number | string;
+  employeeId: number | string;
   leaveType: LeaveTypeKey;
   startDate: string;
   endDate: string;
@@ -195,10 +205,10 @@ export interface AdminLeaveRequest {
 export interface AdminState {
   employees: AdminEmployee[];
   leaveRequests: AdminLeaveRequest[];
-  leaveBalances: Array<{ employeeId: number; leaveType: LeaveTypeKey; amount: number }>;
+  leaveBalances: Array<{ employeeId: number | string; leaveType: LeaveTypeKey; leaveTypeId?: string; amount: number }>;
   leaveLedger: Array<{
-    id: number;
-    employeeId: number;
+    id: number | string;
+    employeeId: number | string;
     leaveType: LeaveTypeKey;
     date: string;
     description: string;
@@ -207,7 +217,7 @@ export interface AdminState {
   }>;
   policies: CountryPolicy[];
   holidays: Array<{
-    id: number;
+    id: number | string;
     name: string;
     date: string;
     country: string;

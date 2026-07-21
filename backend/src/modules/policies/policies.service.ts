@@ -137,7 +137,14 @@ export class PoliciesService {
         rule.carryOverEnabled && rule.carryOverExpirationEnabled
           ? (rule.carryOverExpirationDays ?? null)
           : null,
-      maxConsecutive: rule.maxConsecutive ?? 0,
+      maxConsecutiveDays: rule.maxConsecutiveDays ?? null,
+      allowsHalfDay: rule.allowsHalfDay ?? false,
+      requiresNote: rule.requiresNote ?? false,
+      requiresDocument: rule.requiresDocument ?? false,
+      requiresPositiveBalance: rule.requiresPositiveBalance ?? true,
+      minRequestDays: rule.minRequestDays ?? 0.5,
+      maxRequestDays: rule.maxRequestDays ?? null,
+      allowedCountries: rule.allowedCountries ?? null,
       minNoticeDays: rule.minNoticeDays ?? 0,
       maxBalanceCap: rule.maxBalanceCap ?? null,
       waitingPeriodDays: rule.waitingPeriodDays ?? 0,
@@ -163,6 +170,7 @@ export class PoliciesService {
       createdAt: policy.createdAt,
       updatedAt: policy.updatedAt,
       leaveQuotas: (policy.rules ?? []).map((r) => ({
+        leaveTypeId: r.leaveTypeId,
         leaveType: r.leaveType?.key,
         entitlementDays: r.entitlementDays,
         isAccrued: r.isAccrued,
@@ -177,7 +185,14 @@ export class PoliciesService {
         maxCarryOver: r.maxCarryOver,
         carryOverExpirationEnabled: r.carryOverExpirationEnabled,
         carryOverExpirationDays: r.carryOverExpirationDays,
-        maxConsecutive: r.maxConsecutive,
+        maxConsecutiveDays: r.maxConsecutiveDays,
+        allowsHalfDay: r.allowsHalfDay,
+        requiresNote: r.requiresNote,
+        requiresDocument: r.requiresDocument,
+        requiresPositiveBalance: r.requiresPositiveBalance,
+        minRequestDays: r.minRequestDays,
+        maxRequestDays: r.maxRequestDays,
+        allowedCountries: r.allowedCountries,
         minNoticeDays: r.minNoticeDays,
         maxBalanceCap: r.maxBalanceCap,
         waitingPeriodDays: r.waitingPeriodDays,
@@ -228,7 +243,7 @@ export class PoliciesService {
 
       if (dto.leaveQuotas?.length) {
         for (const ruleDto of dto.leaveQuotas) {
-          const leaveType = await this.resolveLeaveType(ruleDto.leaveType);
+          const leaveType = await this.resolveLeaveType(ruleDto.leaveTypeId || ruleDto.leaveType);
           const rule = em.create(LeaveRule, {
             policyId: savedPolicy.id,
             leaveTypeId: leaveType.id,
@@ -395,7 +410,7 @@ export class PoliciesService {
         if (existingRules.length) await em.delete(LeaveRule, { policyId: id });
 
         for (const ruleDto of dto.leaveQuotas) {
-          const leaveType = await this.resolveLeaveType(ruleDto.leaveType);
+          const leaveType = await this.resolveLeaveType(ruleDto.leaveTypeId || ruleDto.leaveType);
           const rule = em.create(LeaveRule, {
             policyId: id,
             leaveTypeId: leaveType.id,

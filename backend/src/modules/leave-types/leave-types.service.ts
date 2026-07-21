@@ -34,7 +34,8 @@ export class LeaveTypesService {
     } = query;
     const skip = (page - 1) * limit;
     const qb = this.repo.createQueryBuilder('lt');
-    if (q) qb.where('lt.label ILIKE :q OR lt.key ILIKE :q', { q: `%${q}%` });
+    qb.where('lt.key NOT ILIKE :e2ePrefix AND lt.label NOT ILIKE :e2ePrefix', { e2ePrefix: 'e2e_%' });
+    if (q) qb.andWhere('(lt.label ILIKE :q OR lt.key ILIKE :q)', { q: `%${q}%` });
     qb.orderBy(`lt.${sortBy}`, sortOrder).skip(skip).take(limit);
     const [data, total] = await qb.getManyAndCount();
     return paginate(data, total, page, limit);

@@ -109,11 +109,21 @@ export class LeaveRule {
   })
   carryOverExpirationEnabled: boolean;
 
-  @Column({ name: 'carry_over_expiration_days', type: 'int', nullable: true })
+  @Column({    name: 'carry_over_expiration_days',
+    type: 'int',
+    nullable: true,
+  })
   carryOverExpirationDays: number | null;
 
-  @Column({ name: 'max_consecutive', type: 'int', default: 0 })
-  maxConsecutive: number;
+  @Column({
+    name: 'max_consecutive_days',
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    transformer: new ColumnNumericTransformer(),
+  })
+  maxConsecutiveDays: number | null;
 
   @Column({ name: 'min_notice_days', type: 'int', default: 0 })
   minNoticeDays: number;
@@ -130,6 +140,45 @@ export class LeaveRule {
 
   @Column({ name: 'waiting_period_days', type: 'int', default: 0 })
   waitingPeriodDays: number;
+
+  @Column({ name: 'allows_half_day', type: 'boolean', default: false })
+  allowsHalfDay: boolean;
+
+  @Column({ name: 'requires_note', type: 'boolean', default: false })
+  requiresNote: boolean;
+
+  @Column({ name: 'requires_document', type: 'boolean', default: false })
+  requiresDocument: boolean;
+
+  @Column({ name: 'requires_positive_balance', type: 'boolean', default: true })
+  requiresPositiveBalance: boolean;
+
+  @Column({
+    name: 'min_request_days',
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    default: 0.5,
+    transformer: new ColumnNumericTransformer(),
+  })
+  minRequestDays: number;
+
+  @Column({
+    name: 'max_request_days',
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    transformer: new ColumnNumericTransformer(),
+  })
+  maxRequestDays: number | null;
+
+  @Column({
+    name: 'allowed_countries',
+    type: 'jsonb',
+    nullable: true,
+  })
+  allowedCountries: string[] | null;
 
   @OneToMany(() => SeniorityMilestone, (m) => m.leaveRule, { cascade: true })
   milestones: SeniorityMilestone[];

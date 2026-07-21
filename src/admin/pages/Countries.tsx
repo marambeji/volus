@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, AlertCircle, Check, Globe } from 'lucide-react';
 import SearchInput from '../components/ui/SearchInput';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
+import CountryDropdownSelect from '../components/ui/CountryDropdownSelect';
 import {
   getCountries,
   createCountry,
@@ -11,6 +12,8 @@ import {
 } from '../../services/countriesApi';
 import type { CountryItem, CountryPayload } from '../../services/countriesApi';
 import { ApiError } from '../../services/apiClient';
+import type { WorldCountry } from '../../data/countriesList';
+
 
 const emptyForm = (): CountryPayload => ({ name: '', code: '', flag: '' });
 
@@ -263,6 +266,34 @@ export default function Countries() {
             </div>
           )}
 
+          {/* Country Selection Dropdown with Flags */}
+          <div>
+            <CountryDropdownSelect
+              label="Select Country from List (Pays, Drapeaux & Code) *"
+              selectedCode={form.code}
+              selectedName={form.name}
+              onSelect={(country: WorldCountry) => {
+                setForm({
+                  name: country.name,
+                  code: country.code,
+                  flag: country.code,
+                });
+                setErrors({});
+              }}
+              onClear={() => {
+                setForm(emptyForm());
+              }}
+              placeholder="Search or pick country (e.g. Lebanon, FR, US)..."
+            />
+          </div>
+
+          <div className="relative flex items-center justify-center my-2">
+            <div className="border-t border-slate-200 w-full"></div>
+            <span className="bg-white px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wider shrink-0">
+              Or Customize / Adjust Manually
+            </span>
+          </div>
+
           {/* Name */}
           <div>
             <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
@@ -295,10 +326,12 @@ export default function Countries() {
           {/* Preview */}
           {form.code.length === 2 && (
             <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3 border border-slate-200">
-              <span className="text-sm text-slate-500">Preview:</span>
+              <span className="text-sm text-slate-500 font-medium">Selected Country Preview:</span>
               {renderFlag(form.code)}
               <span className="text-slate-800 font-semibold text-sm">{form.name || '—'}</span>
-              <span className="text-slate-500 text-xs">({form.code})</span>
+              <span className="text-xs font-mono font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">
+                {form.code}
+              </span>
             </div>
           )}
         </div>
@@ -328,7 +361,7 @@ export default function Countries() {
         message="Are you sure? This will remove this country and may affect linked policies and holidays."
         confirmLabel="Delete"
         onConfirm={handleDelete}
-        onCancel={() => setDeleteId(null)}
+        onClose={() => setDeleteId(null)}
       />
     </div>
   );

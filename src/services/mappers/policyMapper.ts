@@ -36,6 +36,7 @@ export interface BackendMilestoneDto {
 }
 
 export interface BackendLeaveRuleDto {
+  leaveTypeId?: string;
   leaveType: string;
   entitlementDays?: number | null;
   isAccrued: boolean;
@@ -51,9 +52,17 @@ export interface BackendLeaveRuleDto {
   carryOverExpirationEnabled?: boolean;
   carryOverExpirationDays?: number | null;
   maxConsecutive?: number;
+  maxConsecutiveDays?: number | null;
   minNoticeDays?: number;
   maxBalanceCap?: number | null;
   waitingPeriodDays?: number;
+  allowsHalfDay?: boolean;
+  requiresNote?: boolean;
+  requiresDocument?: boolean;
+  requiresPositiveBalance?: boolean;
+  minRequestDays?: number;
+  maxRequestDays?: number | null;
+  allowedCountries?: string[] | null;
   milestones?: BackendMilestoneDto[];
 }
 
@@ -93,6 +102,7 @@ export interface BackendPolicyResponse {
   createdAt?: string;
   updatedAt?: string;
   leaveQuotas?: Array<{
+    leaveTypeId?: string;
     leaveType: string;
     entitlementDays?: number;
     isAccrued: boolean;
@@ -108,9 +118,17 @@ export interface BackendPolicyResponse {
     carryOverExpirationEnabled?: boolean;
     carryOverExpirationDays?: number;
     maxConsecutive?: number;
+    maxConsecutiveDays?: number | null;
     minNoticeDays?: number;
-    maxBalanceCap?: number;
+    maxBalanceCap?: number | null;
     waitingPeriodDays?: number;
+    allowsHalfDay?: boolean;
+    requiresNote?: boolean;
+    requiresDocument?: boolean;
+    requiresPositiveBalance?: boolean;
+    minRequestDays?: number;
+    maxRequestDays?: number | null;
+    allowedCountries?: string[] | null;
     seniorityMilestones?: Array<{
       serviceYearsFrom: number;
       serviceYearsTo?: number;
@@ -158,8 +176,15 @@ export function frontendQuotaToRuleDto(q: LeaveQuota): BackendLeaveRuleDto {
     cap: null,
   }));
 
+  const maxConsecutiveVal = q.maxConsecutiveDays !== undefined && q.maxConsecutiveDays !== null
+    ? Number(q.maxConsecutiveDays)
+    : q.maxConsecutive !== undefined
+    ? Number(q.maxConsecutive)
+    : 10;
+
   return {
-    leaveType: q.leaveType,
+    leaveTypeId: q.leaveTypeId,
+    leaveType: String(q.leaveTypeId || q.leaveType),
     entitlementDays: q.entitlementDays !== undefined ? Number(q.entitlementDays) : 10,
     isAccrued,
     accrualInterval,
@@ -173,10 +198,17 @@ export function frontendQuotaToRuleDto(q: LeaveQuota): BackendLeaveRuleDto {
     maxCarryOver,
     carryOverExpirationEnabled,
     carryOverExpirationDays,
-    maxConsecutive: q.maxConsecutive !== undefined ? Number(q.maxConsecutive) : 10,
+    maxConsecutiveDays: maxConsecutiveVal,
     minNoticeDays: q.minNoticeDays !== undefined ? Number(q.minNoticeDays) : 0,
     maxBalanceCap: q.maxBalanceCap !== undefined && q.maxBalanceCap !== null ? Number(q.maxBalanceCap) : null,
     waitingPeriodDays: q.waitingPeriodDays !== undefined ? Number(q.waitingPeriodDays) : 0,
+    allowsHalfDay: Boolean(q.allowsHalfDay),
+    requiresNote: Boolean(q.requiresNote),
+    requiresDocument: Boolean(q.requiresDocument),
+    requiresPositiveBalance: q.requiresPositiveBalance !== undefined ? Boolean(q.requiresPositiveBalance) : true,
+    minRequestDays: q.minRequestDays !== undefined ? Number(q.minRequestDays) : 0.5,
+    maxRequestDays: q.maxRequestDays !== undefined && q.maxRequestDays !== null ? Number(q.maxRequestDays) : null,
+    allowedCountries: q.allowedCountries ?? null,
     milestones: milestones.length > 0 ? milestones : undefined,
   };
 }
@@ -215,24 +247,37 @@ export function policyResponseToFrontendPolicy(res: BackendPolicyResponse): Coun
       accruedDays: m.entitlementDays || m.accrualRate || 0,
     }));
 
+    const maxConsecutiveVal = r.maxConsecutiveDays !== undefined && r.maxConsecutiveDays !== null
+      ? Number(r.maxConsecutiveDays)
+      : r.maxConsecutive ?? 10;
+
     return {
-      leaveType: r.leaveType as LeaveTypeKey,
+      leaveTypeId: r.leaveTypeId,
+      leaveType: (r.leaveType || r.leaveTypeId || '') as LeaveTypeKey,
       entitlementDays: r.entitlementDays ?? 0,
       isAccrued: Boolean(r.isAccrued),
       accrualRate: r.accrualRate ?? 0,
       carryOverEnabled: Boolean(r.carryOverEnabled),
       maxCarryOver: r.maxCarryOver ?? 0,
-      maxConsecutive: r.maxConsecutive ?? 10,
+      maxConsecutive: maxConsecutiveVal,
+      maxConsecutiveDays: maxConsecutiveVal,
       minNoticeDays: r.minNoticeDays ?? 0,
       accrualInterval: r.accrualInterval === BackendAccrualInterval.YEARLY ? 'yearly' : 'monthly',
       seniorityMilestones: milestones,
       isCutOffDifferentFromHireDate: isCustomCutOff,
       cutOffDate: cutOffDateStr,
       carryOverExpiration: r.carryOverExpirationEnabled ? '90 days' : '',
-      maxBalanceCap: r.maxBalanceCap ?? 99,
+      maxBalanceCap: r.maxBalanceCap ?? null,
       resetDate: cutOffDateStr || '01-01',
       resetDaysCount: r.resetDaysCount ?? 0,
       waitingPeriodDays: r.waitingPeriodDays ?? 0,
+      allowsHalfDay: Boolean(r.allowsHalfDay),
+      requiresNote: Boolean(r.requiresNote),
+      requiresDocument: Boolean(r.requiresDocument),
+      requiresPositiveBalance: r.requiresPositiveBalance !== undefined ? Boolean(r.requiresPositiveBalance) : true,
+      minRequestDays: r.minRequestDays !== undefined ? Number(r.minRequestDays) : 0.5,
+      maxRequestDays: r.maxRequestDays !== undefined && r.maxRequestDays !== null ? Number(r.maxRequestDays) : null,
+      allowedCountries: r.allowedCountries ?? null,
     };
   });
 

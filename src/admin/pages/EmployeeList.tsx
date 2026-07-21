@@ -7,6 +7,8 @@ import { SelectFilter } from '../components/ui/SelectFilter';
 import StatusBadge from '../components/ui/StatusBadge';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
+import { createEmployee, updateEmployee, deleteEmployee } from '../../services/employeesApi';
+import { toAdminEmployee, toBackendEmployeePayload } from '../../services/mappers/employeeMapper';
 
 const emptyForm = (): Omit<AdminEmployee, 'id'> => ({
   name: '',
@@ -39,10 +41,10 @@ export default function EmployeeList() {
   const [formOpen, setFormOpen] = useState(false);
   const [viewEmp, setViewEmp] = useState<AdminEmployee | null>(null);
   const [editEmp, setEditEmp] = useState<AdminEmployee | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<number | string | null>(null);
   
   // Form State & Validation / Loaders
-  const [form, setForm] = useState<Omit<AdminEmployee, 'id'> & { id?: number }>(emptyForm());
+  const [form, setForm] = useState<Omit<AdminEmployee, 'id'> & { id?: number | string }>(emptyForm());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -110,31 +112,50 @@ export default function EmployeeList() {
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
 
     setIsLoading(true);
-    
-    // Simulate API delay
-    setTimeout(() => {
+    try {
       if (editEmp) {
-        dispatch({ type: 'UPDATE_EMPLOYEE', payload: { ...form, id: editEmp.id } as AdminEmployee });
+        const payload = toBackendEmployeePayload(form);
+        const res = await updateEmployee(String(editEmp.id), payload);
+        const mapped = toAdminEmployee(res);
+        dispatch({ type: 'UPDATE_EMPLOYEE', payload: mapped });
         setToast({ message: `Successfully updated ${form.name}`, type: 'success' });
       } else {
-        const id = Math.max(...state.employees.map(e => e.id), 0) + 1;
-        dispatch({ type: 'ADD_EMPLOYEE', payload: { ...form, id } as AdminEmployee });
+        const payload = toBackendEmployeePayload(form);
+        const res = await createEmployee(payload);
+        const mapped = toAdminEmployee(res);
+        dispatch({ type: 'ADD_EMPLOYEE', payload: mapped });
         setToast({ message: `Successfully added ${form.name}`, type: 'success' });
       }
-      setIsLoading(false);
       setFormOpen(false);
-    }, 600);
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: err?.message || 'Failed to save employee', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  function toggleStatus(emp: AdminEmployee) {
+  async function toggleStatus(emp: AdminEmployee) {
     const next = emp.status === 'active' ? 'inactive' : emp.status === 'inactive' ? 'active' : emp.status === 'archived' ? 'active' : 'archived';
-    dispatch({ type: 'TOGGLE_EMPLOYEE_STATUS', payload: { id: emp.id, status: next } });
-    setToast({ message: `Status updated for ${emp.name}`, type: 'success' });
+    
+    let backendStatus = 'ACTIVE';
+    if (next === 'inactive') backendStatus = 'INACTIVE';
+    if (next === 'archived') backendStatus = 'ARCHIVED';
+
+    try {
+      const res = await updateEmployee(String(emp.id), { status: backendStatus } as any);
+      const mapped = toAdminEmployee(res);
+      dispatch({ type: 'UPDATE_EMPLOYEE', payload: mapped });
+      setToast({ message: `Status updated for ${emp.name}`, type: 'success' });
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: err?.message || 'Failed to update status', type: 'error' });
+    }
   }
 
   const managers = state.employees.filter(e => e.id !== editEmp?.id);
@@ -338,7 +359,7 @@ export default function EmployeeList() {
 
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Manager</label>
-              <select value={form.managerId ?? ''} onChange={e => setForm(p => ({ ...p, managerId: e.target.value ? Number(e.target.value) : undefined }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
+              <select value={form.managerId ?? ''} onChange={e => setForm(p => ({ ...p, managerId: e.target.value ? e.target.value : undefined }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
                 <option value="">No Manager</option>
                 {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
@@ -406,12 +427,19 @@ export default function EmployeeList() {
       <ConfirmModal
         isOpen={deleteId !== null}
         onClose={() => setDeleteId(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteId) {
-            const empName = state.employees.find(e => e.id === deleteId)?.name;
-            dispatch({ type: 'DELETE_EMPLOYEE', payload: deleteId });
-            setToast({ message: `Successfully deleted ${empName}`, type: 'success' });
-            setDeleteId(null);
+            try {
+              await deleteEmployee(String(deleteId));
+              const empName = state.employees.find(e => e.id === deleteId)?.name;
+              dispatch({ type: 'DELETE_EMPLOYEE', payload: deleteId });
+              setToast({ message: `Successfully deleted ${empName}`, type: 'success' });
+            } catch (err: any) {
+              console.error(err);
+              setToast({ message: err?.message || 'Failed to delete employee', type: 'error' });
+            } finally {
+              setDeleteId(null);
+            }
           }
         }}
         title="Delete Employee"

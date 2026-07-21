@@ -4,6 +4,7 @@ import { useAdmin } from '../store/AdminContext';
 import type { LeaveTypeKey } from '../../types';
 import SearchInput from '../components/ui/SearchInput';
 import StatCard from '../components/ui/StatCard';
+import { adjustBalance } from '../../services/balancesApi';
 
 const allLeaveTypes: { key: LeaveTypeKey; label: string }[] = [
   { key: 'annual', label: 'Annual' },
@@ -21,8 +22,8 @@ const allLeaveTypes: { key: LeaveTypeKey; label: string }[] = [
 export default function BalanceManagement() {
   const { state, dispatch } = useAdmin();
   const [search, setSearch] = useState('');
-  const [selectedEmp, setSelectedEmp] = useState<number | null>(state.employees[0]?.id || null);
-  const [adjustModal, setAdjustModal] = useState<{ empId: number, type: LeaveTypeKey } | null>(null);
+  const [selectedEmp, setSelectedEmp] = useState<number | string | null>(state.employees[0]?.id || null);
+  const [adjustModal, setAdjustModal] = useState<{ empId: number | string, type: LeaveTypeKey } | null>(null);
   const [adjustVal, setAdjustVal] = useState(0);
   const [adjustReason, setAdjustReason] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -33,20 +34,47 @@ export default function BalanceManagement() {
 
   const filteredEmps = state.employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()));
 
-  function handleAdjust(e: React.FormEvent) {
+  async function handleAdjust(e: React.FormEvent) {
     e.preventDefault();
     if (adjustModal && adjustVal !== 0) {
       if (!adjustReason.trim()) return;
-      dispatch({ 
-        type: 'ADJUST_BALANCE', 
-        payload: { 
-          employeeId: adjustModal.empId, 
-          leaveType: adjustModal.type, 
-          delta: adjustVal, 
-          reason: adjustReason 
-        } 
-      });
-      setToast(`Successfully adjusted balance for ${state.employees.find(x => x.id === adjustModal.empId)?.name}`);
+
+      const employee = state.employees.find(x => x.id === adjustModal.empId);
+      if (!employee) return;
+
+      const balanceItem = state.leaveBalances.find(b => b.employeeId === adjustModal.empId && b.leaveType === adjustModal.type);
+      const leaveTypeId = balanceItem?.leaveTypeId;
+
+      if (!leaveTypeId) {
+        setToast('Error: Leave type ID not found for this balance.');
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
+
+      try {
+        await adjustBalance({
+          employeeId: String(adjustModal.empId),
+          leaveTypeId,
+          year: Number(filterYear),
+          amount: adjustVal,
+          reason: adjustReason
+        });
+
+        dispatch({ 
+          type: 'ADJUST_BALANCE', 
+          payload: { 
+            employeeId: adjustModal.empId, 
+            leaveType: adjustModal.type, 
+            delta: adjustVal, 
+            reason: adjustReason 
+          } 
+        });
+        setToast(`Successfully adjusted balance for ${employee.name}`);
+      } catch (err: any) {
+        console.error(err);
+        setToast(err?.message || 'Failed to adjust balance.');
+      }
+
       setTimeout(() => setToast(null), 3000);
     }
     setAdjustModal(null);

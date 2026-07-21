@@ -19,6 +19,11 @@ import { AccrualInterval, CutOffType, ResetType } from '../../../common/enums';
 import { CreateMilestoneDto } from './create-milestone.dto';
 
 export class CreateLeaveRuleDto {
+  @ApiPropertyOptional({ example: 'uuid-123', description: 'LeaveType UUID' })
+  @IsString()
+  @IsOptional()
+  leaveTypeId?: string;
+
   @ApiProperty({ example: 'annual', description: 'LeaveType key or UUID' })
   @IsString()
   @IsNotEmpty()
@@ -126,10 +131,48 @@ export class CreateLeaveRuleDto {
   carryOverExpirationDays?: number;
 
   @ApiPropertyOptional({ example: 0 })
-  @IsInt()
+  @IsNumber()
   @Min(0)
   @IsOptional()
-  maxConsecutive?: number;
+  maxConsecutiveDays?: number;
+
+  @ApiPropertyOptional({ example: false })
+  @IsBoolean()
+  @IsOptional()
+  allowsHalfDay?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  @IsBoolean()
+  @IsOptional()
+  requiresNote?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  @IsBoolean()
+  @IsOptional()
+  requiresDocument?: boolean;
+
+  @ApiPropertyOptional({ example: true })
+  @IsBoolean()
+  @IsOptional()
+  requiresPositiveBalance?: boolean;
+
+  @ApiPropertyOptional({ example: 0.5 })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  minRequestDays?: number;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  maxRequestDays?: number;
+
+  @ApiPropertyOptional({ example: ['FR', 'TN'] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  allowedCountries?: string[];
 
   @ApiPropertyOptional({ example: 0 })
   @IsInt()

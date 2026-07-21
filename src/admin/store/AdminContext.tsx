@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer } from 'react';
+import { createContext, useContext, useReducer, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { AdminState, AuditAction, AdminEmployee, CountryPolicy, AuditLogEntry, Department, ApprovalConfiguration } from '../types/adminTypes';
 import type { LeaveTypeKey } from '../../types';
@@ -6,6 +6,9 @@ import {
   adminEmployeesList, adminLeaveRequests, adminLeaveBalances, adminLeaveLedger,
   countriesPolicies, adminHolidays, adminDepartments, adminAuditLog, adminNotifications
 } from '../data/adminMockData';
+import { getEmployees } from '../../services/employeesApi';
+import { toAdminEmployee } from '../../services/mappers/employeeMapper';
+import { getBalances } from '../../services/balancesApi';
 
 // ─── Mock Approval Configurations ──────────────────────────────────────────────
 const mockApprovalLevels: ApprovalConfiguration[] = [
@@ -41,7 +44,7 @@ const initialState: AdminState = {
     ...e,
     role: e.id === 10 ? 'HR Admin' : e.id === 1 || e.id === 2 || e.id === 3 ? 'Manager' : 'Employee',
     division: e.country === 'Lebanon' ? 'Levant' : e.country === 'France' ? 'Europe' : 'International',
-    approvalLevelId: e.id % 3 === 0 ? 'app-2' : e.id % 3 === 1 ? 'app-1' : 'app-3'
+    approvalLevelId: (typeof e.id === 'number' ? e.id : String(e.id).charCodeAt(0)) % 3 === 0 ? 'app-2' : (typeof e.id === 'number' ? e.id : String(e.id).charCodeAt(0)) % 3 === 1 ? 'app-1' : 'app-3'
   })),
   leaveRequests: adminLeaveRequests,
   leaveBalances: adminLeaveBalances,
@@ -58,14 +61,14 @@ const initialState: AdminState = {
 type Action =
   | { type: 'ADD_EMPLOYEE'; payload: AdminEmployee }
   | { type: 'UPDATE_EMPLOYEE'; payload: AdminEmployee }
-  | { type: 'DELETE_EMPLOYEE'; payload: number }
-  | { type: 'TOGGLE_EMPLOYEE_STATUS'; payload: { id: number; status: AdminEmployee['status'] } }
-  | { type: 'APPROVE_REQUEST'; payload: { id: number; comment?: string } }
-  | { type: 'REJECT_REQUEST'; payload: { id: number; comment: string } }
-  | { type: 'CANCEL_REQUEST'; payload: number }
-  | { type: 'ADD_NOTE'; payload: { id: number; note: string } }
-  | { type: 'ADJUST_BALANCE'; payload: { employeeId: number; leaveType: LeaveTypeKey; delta: number; reason: string } }
-  | { type: 'RESET_BALANCE'; payload: { employeeId: number; leaveType: LeaveTypeKey; value: number } }
+  | { type: 'DELETE_EMPLOYEE'; payload: number | string }
+  | { type: 'TOGGLE_EMPLOYEE_STATUS'; payload: { id: number | string; status: AdminEmployee['status'] } }
+  | { type: 'APPROVE_REQUEST'; payload: { id: number | string; comment?: string } }
+  | { type: 'REJECT_REQUEST'; payload: { id: number | string; comment: string } }
+  | { type: 'CANCEL_REQUEST'; payload: number | string }
+  | { type: 'ADD_NOTE'; payload: { id: number | string; note: string } }
+  | { type: 'ADJUST_BALANCE'; payload: { employeeId: number | string; leaveType: LeaveTypeKey; delta: number; reason: string } }
+  | { type: 'RESET_BALANCE'; payload: { employeeId: number | string; leaveType: LeaveTypeKey; value: number } }
   | { type: 'ADD_POLICY'; payload: CountryPolicy }
   | { type: 'UPDATE_POLICY'; payload: CountryPolicy }
   | { type: 'DELETE_POLICY'; payload: string }
@@ -75,11 +78,13 @@ type Action =
   | { type: 'ADD_DEPARTMENT'; payload: Department }
   | { type: 'UPDATE_DEPARTMENT'; payload: Department }
   | { type: 'DELETE_DEPARTMENT'; payload: number }
-  | { type: 'MARK_NOTIFICATION_READ'; payload: number }
+  | { type: 'MARK_NOTIFICATION_READ'; payload: number | string }
   | { type: 'MARK_ALL_READ' }
   | { type: 'ADD_APPROVAL_LEVEL'; payload: ApprovalConfiguration }
   | { type: 'UPDATE_APPROVAL_LEVEL'; payload: ApprovalConfiguration }
-  | { type: 'DELETE_APPROVAL_LEVEL'; payload: string };
+  | { type: 'DELETE_APPROVAL_LEVEL'; payload: string }
+  | { type: 'SET_EMPLOYEES'; payload: AdminEmployee[] }
+  | { type: 'SET_BALANCES'; payload: Array<{ employeeId: number | string; leaveType: LeaveTypeKey; amount: number }> };
 
 function addAuditEntry(
   state: AdminState,
@@ -373,6 +378,12 @@ function adminReducer(state: AdminState, action: Action): AdminState {
       };
     }
 
+    case 'SET_EMPLOYEES':
+      return { ...state, employees: action.payload };
+
+    case 'SET_BALANCES':
+      return { ...state, leaveBalances: action.payload };
+
     default:
       return state;
   }
@@ -388,6 +399,40 @@ const AdminContext = createContext<AdminContextType | null>(null);
 
 export function AdminProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(adminReducer, initialState);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadData() {
+      try {
+        const [backendEmps, backendBals] = await Promise.all([
+          getEmployees(),
+          getBalances(),
+        ]);
+
+        if (!active) return;
+
+        const mappedEmps = backendEmps.map(toAdminEmployee);
+        const mappedBals = backendBals.map((b) => ({
+          employeeId: b.employeeId,
+          leaveTypeId: b.leaveTypeId,
+          leaveType: (b.leaveType?.key || 'annual') as LeaveTypeKey,
+          amount: Number(b.availableBalance),
+        }));
+
+        dispatch({ type: 'SET_EMPLOYEES', payload: mappedEmps });
+        dispatch({ type: 'SET_BALANCES', payload: mappedBals });
+      } catch (err) {
+        console.error('Failed to load live employees/balances:', err);
+      }
+    }
+
+    void loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return <AdminContext.Provider value={{ state, dispatch }}>{children}</AdminContext.Provider>;
 }
 
