@@ -32,21 +32,18 @@ export class ApprovalWorkflowsService {
       );
     }
     for (const step of steps) {
-      if (
-        step.approverType === ApproverType.SPECIFIC_PERSON &&
-        !step.specificApproverId
-      ) {
-        throw new BadRequestException(
-          `Step ${step.stepOrder}: specificApproverId is required for SPECIFIC_PERSON.`,
-        );
-      }
-      if (
-        step.approverType !== ApproverType.SPECIFIC_PERSON &&
-        step.specificApproverId
-      ) {
-        throw new BadRequestException(
-          `Step ${step.stepOrder}: specificApproverId must be null when approverType is not SPECIFIC_PERSON.`,
-        );
+      if (step.approverType === ApproverType.SPECIFIC_PERSON) {
+        if (!step.specificApproverId && !step.specificApproverEmail) {
+          throw new BadRequestException(
+            `Step ${step.stepOrder}: SPECIFIC_PERSON requires specificApproverId or specificApproverEmail.`,
+          );
+        }
+      } else {
+        if (step.specificApproverId || step.specificApproverEmail) {
+          throw new BadRequestException(
+            `Step ${step.stepOrder}: specificApproverId and specificApproverEmail must be null when approverType is not SPECIFIC_PERSON.`,
+          );
+        }
       }
     }
   }
@@ -71,6 +68,7 @@ export class ApprovalWorkflowsService {
           stepOrder: s.stepOrder,
           approverType: s.approverType,
           specificApproverId: s.specificApproverId ?? null,
+          specificApproverEmail: s.specificApproverEmail ?? null,
           isRequired: s.isRequired ?? true,
         }),
       );
@@ -138,6 +136,7 @@ export class ApprovalWorkflowsService {
             stepOrder: s.stepOrder,
             approverType: s.approverType,
             specificApproverId: s.specificApproverId ?? null,
+            specificApproverEmail: s.specificApproverEmail ?? null,
             isRequired: s.isRequired ?? true,
           }),
         );
@@ -152,7 +151,7 @@ export class ApprovalWorkflowsService {
   }
 
   async remove(id: string): Promise<void> {
-    const wf = await this.findOne(id);
-    await this.workflowRepo.softRemove(wf);
+    await this.findOne(id); // throws NotFoundException if not found / already deleted
+    await this.workflowRepo.softDelete(id);
   }
 }

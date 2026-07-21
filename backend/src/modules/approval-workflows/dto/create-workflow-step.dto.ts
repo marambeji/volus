@@ -1,13 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
+  IsEmail,
   IsEnum,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsUUID,
   Min,
-  ValidateIf,
 } from 'class-validator';
 import { ApproverType } from '../../../common/enums';
 
@@ -21,17 +20,15 @@ export class CreateWorkflowStepDto {
   @IsEnum(ApproverType)
   approverType: ApproverType;
 
-  @ApiPropertyOptional({ example: 'uuid-of-employee' })
+  @ApiPropertyOptional({ example: 'c6a2b8e0-1234-5678-90ab-cdef12345678' })
   @IsUUID()
   @IsOptional()
-  @ValidateIf(
-    (o: CreateWorkflowStepDto) =>
-      o.approverType === ApproverType.SPECIFIC_PERSON,
-  )
-  @IsNotEmpty({
-    message: 'specificApproverId is required for SPECIFIC_PERSON approver type',
-  })
   specificApproverId?: string;
+
+  @ApiPropertyOptional({ example: 'approver@example.com' })
+  @IsEmail()
+  @IsOptional()
+  specificApproverEmail?: string;
 
   @ApiPropertyOptional({ example: true })
   @IsBoolean()

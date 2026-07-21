@@ -49,7 +49,7 @@ describe('ApprovalWorkflowsService (Unit Tasks)', () => {
       );
     });
 
-    it('should throw BadRequestException if SPECIFIC_PERSON has no specificApproverId', () => {
+    it('should throw BadRequestException if SPECIFIC_PERSON has neither specificApproverId nor specificApproverEmail', () => {
       const steps = [
         { stepOrder: 1, approverType: ApproverType.SPECIFIC_PERSON },
       ] as any;
@@ -58,20 +58,31 @@ describe('ApprovalWorkflowsService (Unit Tasks)', () => {
       );
     });
 
-    it('should throw BadRequestException if non-SPECIFIC_PERSON has specificApproverId', () => {
-      const steps = [
+    it('should throw BadRequestException if non-SPECIFIC_PERSON has specificApproverId or specificApproverEmail', () => {
+      const steps1 = [
         {
           stepOrder: 1,
           approverType: ApproverType.MANAGER,
           specificApproverId: 'some-uuid',
         },
       ] as any;
-      expect(() => (service as any).validateSteps(steps)).toThrow(
+      expect(() => (service as any).validateSteps(steps1)).toThrow(
+        BadRequestException,
+      );
+
+      const steps2 = [
+        {
+          stepOrder: 1,
+          approverType: ApproverType.MANAGER,
+          specificApproverEmail: 'test@example.com',
+        },
+      ] as any;
+      expect(() => (service as any).validateSteps(steps2)).toThrow(
         BadRequestException,
       );
     });
 
-    it('should pass with valid step parameters', () => {
+    it('should pass with valid step parameters using ID or email for SPECIFIC_PERSON', () => {
       const steps = [
         { stepOrder: 1, approverType: ApproverType.MANAGER },
         {
@@ -79,7 +90,12 @@ describe('ApprovalWorkflowsService (Unit Tasks)', () => {
           approverType: ApproverType.SPECIFIC_PERSON,
           specificApproverId: 'some-uuid',
         },
-        { stepOrder: 3, approverType: ApproverType.HR },
+        {
+          stepOrder: 3,
+          approverType: ApproverType.SPECIFIC_PERSON,
+          specificApproverEmail: 'approver@example.com',
+        },
+        { stepOrder: 4, approverType: ApproverType.HR },
       ] as any;
       expect(() => (service as any).validateSteps(steps)).not.toThrow();
     });

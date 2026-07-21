@@ -31,6 +31,14 @@ export class ApprovalWorkflowStep {
   @Column({ name: 'specific_approver_id', type: 'uuid', nullable: true })
   specificApproverId: string | null;
 
+  @Column({
+    name: 'specific_approver_email',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  specificApproverEmail: string | null;
+
   @Column({ name: 'is_required', type: 'boolean', default: true })
   isRequired: boolean;
 

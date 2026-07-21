@@ -252,7 +252,17 @@ export class PoliciesService {
         }
       }
 
-      return this.findOne(savedPolicy.id);
+      // Use the transaction's em to load relations (avoids READ COMMITTED isolation issue)
+      const fullPolicy = await em.findOne(LeavePolicy, {
+        where: { id: savedPolicy.id },
+        relations: {
+          country: true,
+          approvalWorkflow: true,
+          divisions: true,
+          rules: { leaveType: true, milestones: true },
+        },
+      });
+      return this.serializePolicy(fullPolicy!);
     });
   }
 
@@ -409,7 +419,17 @@ export class PoliciesService {
         }
       }
 
-      return this.findOne(id);
+      // Use the transaction's em to load relations (avoids READ COMMITTED isolation issue)
+      const fullPolicy = await em.findOne(LeavePolicy, {
+        where: { id },
+        relations: {
+          country: true,
+          approvalWorkflow: true,
+          divisions: true,
+          rules: { leaveType: true, milestones: true },
+        },
+      });
+      return this.serializePolicy(fullPolicy!);
     });
   }
 

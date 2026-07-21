@@ -34,7 +34,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         return {
           type: 'postgres',
           ...baseConfig,
-          ...sslConfig,
+          ...sslConfig, // always applied; empty object when DB_SSL=false
           autoLoadEntities: true,
           synchronize: false,
           logging: configService.get<string>('NODE_ENV') !== 'production',

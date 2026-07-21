@@ -14,6 +14,7 @@ import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import ApprovalLevels from './pages/ApprovalLevels';
 import AccrualHistory from './pages/AccrualHistory';
+import Countries from './pages/Countries';
 
 export default function AdminApp({ onLogout }: { onLogout?: () => void }) {
   return (
@@ -28,7 +29,7 @@ export default function AdminApp({ onLogout }: { onLogout?: () => void }) {
           <Route path="/accrual-history" element={<AccrualHistory />} />
           <Route path="/policies" element={<LeavePolicies />} />
           <Route path="/approval-levels" element={<ApprovalLevels />} />
-          <Route path="/countries" element={<Navigate to="/admin/policies" replace />} />
+          <Route path="/countries" element={<Countries />} />
           <Route path="/holidays" element={<PublicHolidays />} />
           <Route path="/departments" element={<Departments />} />
           <Route path="/reports" element={<Reports />} />

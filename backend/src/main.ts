@@ -1,3 +1,7 @@
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+dotenv.config({ path: path.join(__dirname, '..', '.env'), override: true });
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
@@ -7,10 +11,16 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const frontendOrigins = process.env.FRONTEND_ORIGINS
+    ? process.env.FRONTEND_ORIGINS.split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+    : ['http://localhost:5173', 'http://localhost:5174'];
+
   app.enableCors({
-    origin: '*',
+    origin: frontendOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
+    credentials: false,
   });
 
   app.setGlobalPrefix('api');

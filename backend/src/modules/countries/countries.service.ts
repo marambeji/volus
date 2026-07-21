@@ -27,7 +27,10 @@ export class CountriesService {
         'A country with this name or code already exists.',
       );
     }
-    const country = this.countryRepo.create(dto);
+    const country = this.countryRepo.create({
+      ...dto,
+      flag: dto.flag || dto.code,
+    });
     return this.countryRepo.save(country);
   }
 

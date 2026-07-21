@@ -12,10 +12,17 @@ import { ApprovalWorkflowsModule } from './modules/approval-workflows/approval-w
 import { PublicHolidaysModule } from './modules/public-holidays/public-holidays.module';
 import { PoliciesModule } from './modules/policies/policies.module';
 
+import * as path from 'path';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        path.join(__dirname, '..', '.env'),
+        path.join(process.cwd(), '.env'),
+        path.join(process.cwd(), 'backend', '.env'),
+      ],
       load: [databaseConfig],
       validate,
     }),

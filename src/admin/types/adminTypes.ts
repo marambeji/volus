@@ -1,7 +1,7 @@
 import type { LeaveTypeKey } from '../../types';
 
 // ─── Approval Levels ────────────────────────────────────────────────────────
-export type ApproverType = 'manager' | 'manager_manager' | 'specific_employee';
+export type ApproverType = 'manager' | 'manager_manager' | 'specific_employee' | 'hr';
 
 export interface ApprovalLevel {
   type: ApproverType;

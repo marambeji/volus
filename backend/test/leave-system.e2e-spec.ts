@@ -4,7 +4,12 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  INestApplication,
+  HttpStatus,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { HttpExceptionFilter } from './../src/common/filters/http-exception.filter';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -19,10 +24,11 @@ jest.setTimeout(60000);
 const describeDb =
   process.env.TEST_E2E_DB === 'true' ? describe : describe.skip;
 
-/** Generate a short, <=3-char ISO-style code that is unique per millisecond run. */
+/** Generate a unique <=3-char alphanumeric code, stable for the duration of a test run. */
 function uniqueCode(prefix: string): string {
-  // Keep to 2 chars after prefix so total stays <=3
-  return (prefix + String(Date.now() % 99).padStart(2, '0')).slice(0, 3);
+  // base-36 of full timestamp → last 2 chars give 1296 unique values cycling every ~1.3 s
+  const ts = Date.now().toString(36).toUpperCase().slice(-2);
+  return (prefix + ts).slice(0, 3);
 }
 
 describeDb('Leave System (e2e) - Requires Database', () => {
@@ -40,14 +46,20 @@ describeDb('Leave System (e2e) - Requires Database', () => {
       app.setGlobalPrefix('api');
       app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
       app.useGlobalPipes(
-        new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+        new ValidationPipe({
+          whitelist: true,
+          forbidNonWhitelisted: true,
+          transform: true,
+        }),
       );
       app.useGlobalFilters(new HttpExceptionFilter());
       await app.init();
       dataSource = app.get(DataSource);
       hasDb = dataSource.isInitialized;
     } catch (err) {
-      console.log('Skipping e2e database-dependent setup: no database connection.');
+      console.log(
+        'Skipping e2e database-dependent setup: no database connection.',
+      );
       hasDb = false;
     }
   });
@@ -214,20 +226,34 @@ describeDb('Leave System (e2e) - Requires Database', () => {
 
       await request(app.getHttpServer())
         .post('/api/v1/holidays')
-        .send({ name: 'E2E Holiday', date: '2026-12-25', countryId, isRecurring: true })
+        .send({
+          name: 'E2E Holiday',
+          date: '2026-12-25',
+          countryId,
+          isRecurring: true,
+        })
         .expect(HttpStatus.CREATED);
 
       // Duplicate recurring (same month/day + country) → 409
       await request(app.getHttpServer())
         .post('/api/v1/holidays')
-        .send({ name: 'Dupe E2E Holiday', date: '2026-12-25', countryId, isRecurring: true })
+        .send({
+          name: 'Dupe E2E Holiday',
+          date: '2026-12-25',
+          countryId,
+          isRecurring: true,
+        })
         .expect(HttpStatus.CONFLICT);
 
       // Leap-year projection for 2028
       const listRes = await request(app.getHttpServer())
         .get(`/api/v1/holidays?countryId=${countryId}&year=2028`)
         .expect(HttpStatus.OK);
-      expect(listRes.body.some((h: any) => h.name === 'E2E Holiday' && h.date === '2028-12-25')).toBe(true);
+      expect(
+        listRes.body.some(
+          (h: any) => h.name === 'E2E Holiday' && h.date === '2028-12-25',
+        ),
+      ).toBe(true);
 
       // Cleanup country (holidays have ON DELETE CASCADE? No — RESTRICT for country. Soft-delete country is fine)
       await request(app.getHttpServer())
@@ -257,13 +283,22 @@ describeDb('Leave System (e2e) - Requires Database', () => {
 
       const wfRes = await request(app.getHttpServer())
         .post('/api/v1/approval-workflows')
-        .send({ name: `E2E Pol WF ${suffix}`, steps: [{ stepOrder: 1, approverType: 'MANAGER' }] })
+        .send({
+          name: `E2E Pol WF ${suffix}`,
+          steps: [{ stepOrder: 1, approverType: 'MANAGER' }],
+        })
         .expect(HttpStatus.CREATED);
       const approvalWorkflowId = wfRes.body.id;
 
       await request(app.getHttpServer())
         .post('/api/v1/leave-types')
-        .send({ key: ltKey, label: `E2E LT ${suffix}`, trackingMode: 'AVAILABLE_BALANCE', color: '#3B82F6', displayOrder: 1 })
+        .send({
+          key: ltKey,
+          label: `E2E LT ${suffix}`,
+          trackingMode: 'AVAILABLE_BALANCE',
+          color: '#3B82F6',
+          displayOrder: 1,
+        })
         .expect(HttpStatus.CREATED);
 
       // Create policy
@@ -274,17 +309,19 @@ describeDb('Leave System (e2e) - Requires Database', () => {
         approvalWorkflowId,
         divisionAssignment: divName,
         weekendDays: [5, 6],
-        leaveQuotas: [{
-          leaveType: ltKey,
-          entitlementDays: 25,
-          isAccrued: false,
-          cutOffType: 'FIXED_DATE',
-          cutOffMonth: 1,
-          cutOffDay: 1,
-          resetType: 'YEARLY',
-          carryOverEnabled: true,
-          maxCarryOver: 5,
-        }],
+        leaveQuotas: [
+          {
+            leaveType: ltKey,
+            entitlementDays: 25,
+            isAccrued: false,
+            cutOffType: 'FIXED_DATE',
+            cutOffMonth: 1,
+            cutOffDay: 1,
+            resetType: 'YEARLY',
+            carryOverEnabled: true,
+            maxCarryOver: 5,
+          },
+        ],
       };
 
       const createRes = await request(app.getHttpServer())
@@ -301,16 +338,18 @@ describeDb('Leave System (e2e) - Requires Database', () => {
         .put(`/api/v1/policies/${createRes.body.id}`)
         .send({
           policyName: `E2E Policy ${suffix} Updated`,
-          leaveQuotas: [{
-            leaveType: ltKey,
-            entitlementDays: 28,
-            isAccrued: true,
-            accrualInterval: 'MONTHLY',
-            accrualRate: 2.33,
-            cutOffType: 'HIRE_DATE',
-            resetType: 'NONE',
-            carryOverEnabled: false,
-          }],
+          leaveQuotas: [
+            {
+              leaveType: ltKey,
+              entitlementDays: 28,
+              isAccrued: true,
+              accrualInterval: 'MONTHLY',
+              accrualRate: 2.33,
+              cutOffType: 'HIRE_DATE',
+              resetType: 'NONE',
+              carryOverEnabled: false,
+            },
+          ],
         })
         .expect(HttpStatus.OK);
 
