@@ -1,4 +1,4 @@
-import { X, Edit2, ShieldCheck, Clock, Check, AlertCircle, FileText, Calendar } from 'lucide-react';
+import { X, Edit2, ShieldCheck, FileText } from 'lucide-react';
 import type { CountryPolicy, ApprovalConfiguration } from '../../types/adminTypes';
 
 interface PolicyDetailsModalProps {

@@ -58,7 +58,7 @@ export default function EmployeeList() {
   }, [toast]);
 
   const departments = [...new Set(state.employees.map(e => e.department))];
-  const countries   = [...new Set(state.employees.map(e => e.country))];
+  const countries = ['Lebanon', 'United Arab Emirates', 'Saudi Arabia', 'United Kingdom', 'France', 'Tunisia', 'Canada'];
 
   const filtered = state.employees.filter(e => {
     const q = search.toLowerCase();
@@ -126,7 +126,9 @@ export default function EmployeeList() {
         setToast({ message: `Successfully updated ${form.name}`, type: 'success' });
       } else {
         const payload = toBackendEmployeePayload(form);
-        const res = await createEmployee(payload);
+        const { status, ...createPayload } = payload;
+        console.log('Sending create payload without status:', createPayload);
+        const res = await createEmployee(createPayload);
         const mapped = toAdminEmployee(res);
         dispatch({ type: 'ADD_EMPLOYEE', payload: mapped });
         setToast({ message: `Successfully added ${form.name}`, type: 'success' });

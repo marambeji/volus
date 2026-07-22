@@ -108,3 +108,31 @@ export async function getLeaveConfiguration(
   });
 }
 
+export async function getMyLeaveBalances(
+  signal?: AbortSignal
+): Promise<any> {
+  return apiFetch<any>(`/employees/me/leave-balances`, { signal });
+}
+
+export async function submitLeaveRequest(
+  payload: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; reason?: string }
+): Promise<any> {
+  return apiFetch<any>(`/leave-requests`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getDirectory(
+  query?: { q?: string; department?: string; page?: number; limit?: number },
+  signal?: AbortSignal
+): Promise<any> {
+  const searchParams = new URLSearchParams();
+  if (query?.q) searchParams.set('q', query.q);
+  if (query?.department && query.department !== 'All') searchParams.set('department', query.department);
+  if (query?.page) searchParams.set('page', query.page.toString());
+  if (query?.limit) searchParams.set('limit', query.limit.toString());
+  
+  return apiFetch<any>(`/employees/directory?${searchParams.toString()}`, { signal });
+}
+

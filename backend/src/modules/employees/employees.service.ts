@@ -18,6 +18,7 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
 import { paginate } from '../../common/dto/pagination.dto';
+import { DirectoryEmployeeDto, PaginatedDirectoryResponse } from './dto/directory-employee.dto';
 import { EmployeeStatus, LedgerTransactionType } from '../../common/enums';
 
 @Injectable()
@@ -311,6 +312,84 @@ export class EmployeesService {
     return this.serializeEmployee(employee);
   }
 
+  // ── Directory ────────────────────────────────────────────────────────────────
+
+  async getDirectory(query: { page?: number; limit?: number; q?: string; department?: string }): Promise<PaginatedDirectoryResponse> {
+    const { page = 1, limit = 20, q, department } = query;
+    const skip = (page - 1) * limit;
+
+    const qb = this.employeeRepo
+      .createQueryBuilder('emp')
+      .leftJoinAndSelect('emp.country', 'country')
+      .leftJoinAndSelect('emp.manager', 'manager')
+      .where('emp.deletedAt IS NULL')
+      .andWhere('emp.status = :status', { status: EmployeeStatus.ACTIVE });
+
+    if (q) {
+      qb.andWhere(
+        '(emp.fullName ILIKE :q OR emp.email ILIKE :q OR emp.jobTitle ILIKE :q OR emp.department ILIKE :q)',
+        { q: `%${q}%` },
+      );
+    }
+    
+    if (department && department !== 'All') {
+      qb.andWhere('emp.department = :department', { department });
+    }
+
+    qb.orderBy('emp.fullName', 'ASC').skip(skip).take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    const items: DirectoryEmployeeDto[] = data.map((emp) => ({
+      id: emp.id,
+      displayName: emp.fullName,
+      workEmail: emp.email,
+      jobTitle: emp.jobTitle,
+      startDate: emp.hireDate,
+      department: {
+        id: emp.department, // using name as id since we don't have a department entity
+        name: emp.department,
+      },
+      team: emp.unit ? { id: emp.unit, name: emp.unit } : null,
+      country: {
+        code: emp.country?.code || '',
+        name: emp.country?.name || '',
+      },
+      manager: emp.manager ? { id: emp.manager.id, displayName: emp.manager.fullName } : null,
+      avatarUrl: emp.avatar || null,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize: limit,
+    };
+  }
+
+  // ── Dev Login ────────────────────────────────────────────────────────────────
+
+  async devLogin(email: string) {
+    const normalizedEmail = this.normalizeEmail(email);
+    const employee = await this.employeeRepo.findOne({
+      where: { email: normalizedEmail, deletedAt: IsNull() },
+    });
+    if (!employee) {
+      throw new NotFoundException(`Employee with email ${normalizedEmail} not found`);
+    }
+    if (employee.status !== EmployeeStatus.ACTIVE) {
+      throw new BadRequestException(`Employee ${normalizedEmail} is not active`);
+    }
+    
+    return {
+      id: employee.id,
+      name: employee.fullName,
+      email: employee.email,
+      role: employee.role === 'HR_ADMIN' ? 'admin' : (employee.role === 'MANAGER' ? 'manager' : 'employee'),
+      avatar: employee.avatar || employee.fullName.split(' ').map(n => n[0]).join('').toUpperCase()
+    };
+  }
+
   // ── Update ───────────────────────────────────────────────────────────────────
 
   async update(id: string, dto: UpdateEmployeeDto) {
@@ -343,7 +422,7 @@ export class EmployeesService {
     const currentDate = new Date().toISOString().slice(0, 10);
     const currentYear = new Date().getFullYear();
 
-    return this.dataSource.transaction(async (em) => {
+    await this.dataSource.transaction(async (em) => {
       const updateData: Partial<Employee> = {};
       if (dto.fullName) updateData.fullName = dto.fullName.trim();
       if (dto.email) updateData.email = this.normalizeEmail(dto.email);

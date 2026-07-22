@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, AlertCircle, RefreshCw, Eye, ShieldCheck, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, AlertCircle, RefreshCw, Eye, FileText } from 'lucide-react';
 import type { CountryPolicy, LeaveQuota } from '../types/adminTypes';
 import type { LeaveTypeKey } from '../../types';
 import SearchInput from '../components/ui/SearchInput';

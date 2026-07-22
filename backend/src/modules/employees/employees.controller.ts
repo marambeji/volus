@@ -10,9 +10,13 @@ import {
   Post,
   Put,
   Query,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
+import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
@@ -20,12 +24,28 @@ import { EmployeeQueryDto } from './dto/employee-query.dto';
 @ApiTags('Employees')
 @Controller({ path: 'employees', version: '1' })
 export class EmployeesController {
-  constructor(private readonly service: EmployeesService) {}
+  constructor(
+    private readonly service: EmployeesService,
+    private readonly leaveBalancesService: LeaveBalancesService,
+  ) {}
+
+  @Post('dev-login')
+  @ApiOperation({ summary: 'Mock login endpoint for development' })
+  devLogin(@Body('email') email: string) {
+    if (!email) throw new UnauthorizedException('Email is required');
+    return this.service.devLogin(email);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create an employee with policy assignment' })
   create(@Body() dto: CreateEmployeeDto) {
     return this.service.create(dto);
+  }
+
+  @Get('directory')
+  @ApiOperation({ summary: 'Get directory of active employees' })
+  getDirectory(@Query() query: { page?: number; limit?: number; q?: string; department?: string }) {
+    return this.service.getDirectory(query);
   }
 
   @Get()
@@ -34,6 +54,15 @@ export class EmployeesController {
   })
   findAll(@Query() query: EmployeeQueryDto) {
     return this.service.findAll(query);
+  }
+
+  @Get('me/leave-balances')
+  @ApiOperation({ summary: 'Get calculated leave balances for the authenticated employee' })
+  async getMyLeaveBalances(@Headers('x-employee-id') employeeId: string) {
+    if (!employeeId) {
+      throw new UnauthorizedException('Missing x-employee-id header');
+    }
+    return this.leaveBalancesService.calculateBalancesForEmployee(employeeId);
   }
 
   @Get(':id')

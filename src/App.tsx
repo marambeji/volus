@@ -10,7 +10,7 @@ import Login from './pages/Login';
 import AdminApp from './admin/AdminApp';
 
 interface UserSession {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: 'admin' | 'manager' | 'employee';
@@ -20,7 +20,16 @@ interface UserSession {
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
     const stored = localStorage.getItem('currentUser');
-    return stored ? JSON.parse(stored) : null;
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Auto-logout if it's the old mock ID format (not a UUID)
+      if (typeof parsed.id === 'number' || String(parsed.id).length < 20) {
+        localStorage.removeItem('currentUser');
+        return null;
+      }
+      return parsed;
+    }
+    return null;
   });
 
   const handleLogin = (user: UserSession) => {

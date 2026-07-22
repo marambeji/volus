@@ -71,3 +71,10 @@ export enum LedgerTransactionType {
   CARRY_OVER = 'CARRY_OVER',
   RESET = 'RESET',
 }
+
+export enum LeaveRequestStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  CANCELLED = 'CANCELLED',
+}

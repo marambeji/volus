@@ -3,9 +3,10 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, IsNull } from 'typeorm';
 import { createHash } from 'crypto';
 import { LeaveBalance } from './entities/leave-balance.entity';
 import { LeaveLedgerEntry } from './entities/leave-ledger-entry.entity';
@@ -15,7 +16,11 @@ import { AdjustBalanceDto } from './dto/adjust-balance.dto';
 import { BalanceQueryDto } from './dto/balance-query.dto';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
 import { paginate } from '../../common/dto/pagination.dto';
-import { LeaveTrackingMode, LedgerTransactionType } from '../../common/enums';
+import { LeaveTrackingMode, LedgerTransactionType, EmployeeStatus, LeavePolicyStatus, LeaveRequestStatus } from '../../common/enums';
+import { LeaveRequest } from '../leave-requests/entities/leave-request.entity';
+import { LeavePolicy } from '../policies/entities/leave-policy.entity';
+import { EmployeePolicyAssignment } from '../employees/entities/employee-policy-assignment.entity';
+
 
 @Injectable()
 export class LeaveBalancesService {
@@ -37,6 +42,134 @@ export class LeaveBalancesService {
     const raw = `${dto.employeeId}:${dto.leaveTypeId}:${dto.year}:${normAmount}:${normReason}`;
     // SHA-256 hex digest is always exactly 64 chars — fits VARCHAR(64)
     return createHash('sha256').update(raw).digest('hex');
+  }
+
+  // ── Calculate Balances Engine ───────────────────────────────────────────────
+
+  async calculateBalancesForEmployee(employeeId: string, year?: number) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentYear = year || new Date().getFullYear();
+
+    const employee = await this.employeeRepo.findOne({
+      where: { id: employeeId, deletedAt: IsNull() },
+      relations: { policyAssignments: { leavePolicy: { rules: { leaveType: true } } } },  });
+
+    if (!employee) throw new NotFoundException('Employee not found');
+    if (employee.status !== EmployeeStatus.ACTIVE) {
+      throw new ForbiddenException('Employee is not active');
+    }
+
+    const activeAssignments = (employee.policyAssignments || []).filter(
+      (a) =>
+        a.isActive &&
+        a.effectiveFrom <= todayStr &&
+        (!a.effectiveTo || a.effectiveTo >= todayStr)
+    );
+
+    if (activeAssignments.length === 0) {
+      throw new BadRequestException('No active policy assignment found for the current date.');
+    }
+    if (activeAssignments.length > 1) {
+      throw new ConflictException('Multiple overlapping active policy assignments found.');
+    }
+
+    const assignment = activeAssignments[0];
+    const policy = await this.dataSource.getRepository(LeavePolicy).findOne({
+      where: { id: assignment.leavePolicyId },
+      relations: { rules: { leaveType: true } },
+    });
+
+    if (!policy) throw new NotFoundException('Leave policy not found');
+    if (policy.status !== LeavePolicyStatus.ACTIVE) throw new BadRequestException('Assigned policy is not active');
+
+    const ledgerEntries = await this.ledgerRepo.find({
+      where: { employeeId },
+    });
+
+    const requestRepo = this.dataSource.getRepository(LeaveRequest);
+    const pendingRequests = await requestRepo.find({
+      where: { employeeId, status: LeaveRequestStatus.PENDING },
+    });
+
+    const results = [];
+
+    for (const rule of (policy.rules || [])) {
+      if (!rule.leaveType || !rule.leaveType.isActive) continue;
+      
+      const leaveTypeId = rule.leaveType.id;
+      const typeLedger = ledgerEntries.filter(e => e.leaveTypeId === leaveTypeId && new Date(e.transactionDate).getFullYear() === currentYear);
+
+      let openingBalance = 0;
+      let accruedAmount = 0;
+      let carriedOverAmount = 0;
+      let manualAdjustments = 0;
+      let approvedUsed = 0;
+
+      for (const entry of typeLedger) {
+        const amount = Number(entry.signedAmount);
+        switch (entry.transactionType) {
+          case LedgerTransactionType.INITIAL_GRANT:
+            openingBalance += amount;
+            break;
+          case LedgerTransactionType.ACCRUAL:
+            accruedAmount += amount;
+            break;
+          case LedgerTransactionType.CARRY_OVER:
+            carriedOverAmount += amount;
+            break;
+          case LedgerTransactionType.MANUAL_ADJUSTMENT:
+            manualAdjustments += amount;
+            break;
+          case LedgerTransactionType.USAGE:
+            approvedUsed += Math.abs(amount);
+            break;
+          case LedgerTransactionType.REVERSAL:
+            approvedUsed -= Math.abs(amount);
+            break;
+        }
+      }
+
+      const pendingAmount = pendingRequests
+        .filter(r => r.leaveTypeId === leaveTypeId)
+        .reduce((sum, r) => sum + Number(r.durationDays), 0);
+
+      const availableBalance = openingBalance + accruedAmount + carriedOverAmount + manualAdjustments - approvedUsed;
+      
+      results.push({
+        leaveTypeId: rule.leaveType.id,
+        code: rule.leaveType.key,
+        name: rule.leaveType.label,
+        color: rule.leaveType.color || '#7C3AED',
+        trackingMode: rule.leaveType.trackingMode,
+        openingBalance,
+        annualEntitlement: Number(rule.entitlementDays) || 0,
+        accruedAmount,
+        projectedAccrual: 0,
+        carriedOverAmount,
+        manualAdjustments,
+        approvedUsed,
+        pendingAmount,
+        availableBalance: rule.leaveType.trackingMode === LeaveTrackingMode.USAGE_YTD ? 0 : availableBalance,
+        usageYtd: approvedUsed,
+        allowsHalfDay: rule.allowsHalfDay ?? false,
+        requiresNote: rule.requiresNote ?? false,
+        requiresDocument: rule.requiresDocument ?? false,
+        requiresPositiveBalance: rule.requiresPositiveBalance ?? true,
+      });
+    }
+
+    return {
+      employeeId: employee.id,
+      employeeName: employee.fullName,
+      countryCode: employee.country?.code,
+      policyId: policy.id,
+      policyName: policy.policyName,
+      period: {
+        startDate: `${currentYear}-01-01`,
+        endDate: `${currentYear}-12-31`,
+      },
+      balances: results,
+    };
   }
 
   // ── FindAll Balances ────────────────────────────────────────────────────────

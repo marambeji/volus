@@ -44,8 +44,18 @@ export async function apiFetch<T>(
   const baseUrl = (envUrl || 'http://localhost:3000/api/v1').replace(/\/+$/, '');
   const url = `${baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
 
+  let currentUserId: string | undefined;
+  try {
+    const stored = localStorage.getItem('currentUser');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed?.id) currentUserId = String(parsed.id);
+    }
+  } catch (e) {}
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    ...(currentUserId ? { 'x-employee-id': currentUserId } : {}),
     ...(options.headers || {}),
   };
 

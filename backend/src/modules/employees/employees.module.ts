@@ -10,6 +10,7 @@ import { LeaveBalance } from '../leave-balances/entities/leave-balance.entity';
 import { LeaveLedgerEntry } from '../leave-balances/entities/leave-ledger-entry.entity';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
+import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { EmployeesController } from './employees.controller';
       LeaveBalance,
       LeaveLedgerEntry,
     ]),
+    LeaveBalancesModule,
   ],
   controllers: [EmployeesController],
   providers: [EmployeesService],

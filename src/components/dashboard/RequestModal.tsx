@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, CalendarDays, FileText, Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2, Upload } from 'lucide-react';
-import { getLeaveConfiguration, type LeaveConfiguration, getEmployees } from '../../services/employeesApi';
+import { getMyLeaveBalances, submitLeaveRequest } from '../../services/employeesApi';
 
 interface RequestModalProps {
   isOpen: boolean;
@@ -12,7 +12,7 @@ interface DailyAmounts {
 }
 
 export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
-  const [config, setConfig] = useState<LeaveConfiguration | null>(null);
+  const [config, setConfig] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -33,19 +33,14 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
       setErrorMsg('');
       const fetchConfig = async () => {
         try {
-          const employees = await getEmployees({ limit: 1 });
-          if (employees.length === 0) {
-            throw new Error('No active employees found to request leave for.');
-          }
-          const employeeId = employees[0].id;
-          const conf = await getLeaveConfiguration(employeeId);
+          const conf = await getMyLeaveBalances();
           setConfig(conf);
-          if (conf.leaveTypes.length > 0) {
-             const defaultType = conf.leaveTypes.find(t => t.code === 'ANNUAL') || conf.leaveTypes[0];
+          if (conf.balances && conf.balances.length > 0) {
+             const defaultType = conf.balances.find((t: any) => t.code === 'ANNUAL') || conf.balances[0];
              setTypeId(defaultType.leaveTypeId);
           }
         } catch (error: any) {
-          setErrorMsg(error.message || 'Failed to load leave configuration.');
+          setErrorMsg(error.message || 'Failed to load leave balances.');
         } finally {
           setLoading(false);
         }
@@ -71,7 +66,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
     }
   }, [startDate]);
 
-  const selectedLeaveConfig = config?.leaveTypes.find(t => t.leaveTypeId === typeId);
+  const selectedLeaveConfig = config?.balances?.find((t: any) => t.leaveTypeId === typeId);
   const allowsHalfDay = selectedLeaveConfig?.allowsHalfDay ?? false;
   const trackingMode = selectedLeaveConfig?.trackingMode;
   const availableBalance = selectedLeaveConfig?.availableBalance ?? 0;
@@ -113,7 +108,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
   // Validations
   let validationError = '';
   if (selectedLeaveConfig) {
-    if (!selectedLeaveConfig.eligible) {
+    if (selectedLeaveConfig.eligible === false) {
       validationError = selectedLeaveConfig.ineligibilityReasons.join(' ');
     } else if (startDate && endDate) {
       if (minRequestDays > 0 && totalDays < minRequestDays) {
@@ -180,13 +175,25 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
     setCalDate(new Date(calYear, calMonth + 1, 1));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (validationError) return;
-    setSubmitted(true);
-    setTimeout(() => {
-      onClose();
-    }, 2000);
+    
+    try {
+      await submitLeaveRequest({
+        leaveTypeId: typeId,
+        startDate,
+        endDate,
+        durationDays: totalDays,
+        reason,
+      });
+      setSubmitted(true);
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit request');
+    }
   }
 
   function handleDailyAmountChange(dateStr: string, value: number) {
@@ -364,9 +371,9 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
                         required
                       >
                         <option value="" disabled>Select Leave Type</option>
-                        {config?.leaveTypes.map((lt) => (
-                          <option key={lt.leaveTypeId} value={lt.leaveTypeId} disabled={!lt.eligible}>
-                            {lt.name} {lt.eligible ? '' : '(Ineligible)'}
+                        {config?.balances?.map((lt: any) => (
+                          <option key={lt.leaveTypeId} value={lt.leaveTypeId} disabled={lt.eligible === false}>
+                            {lt.name} {lt.eligible === false ? '(Ineligible)' : ''}
                           </option>
                         ))}
                       </select>

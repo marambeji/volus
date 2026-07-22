@@ -1,4 +1,5 @@
-import { dashboardStats } from '../../data/mockData';
+import { useState, useEffect } from 'react';
+import { getMyLeaveBalances } from '../../services/employeesApi';
 
 // Minimalist card config mimicking the upload screenshot
 const cardConfigs = [
@@ -21,9 +22,38 @@ const cardConfigs = [
 ];
 
 export default function StatsBar() {
+  const [stats, setStats] = useState([
+    { id: 1, label: 'Available Leave', value: '...', icon: <span className="flex">🏖️</span> },
+    { id: 2, label: 'Pending Leave (Days)', value: '...', icon: <span className="flex">⏳</span> },
+    { id: 3, label: 'Approved this Year', value: '...', icon: <span className="flex">✅</span> },
+    { id: 4, label: 'Team Out Today', value: '3', icon: <span className="flex">👥</span> },
+  ]);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const conf = await getMyLeaveBalances();
+        if (conf && conf.balances) {
+          const annual = conf.balances.find((b: any) => b.code === 'ANNUAL') || conf.balances[0];
+          if (annual) {
+            setStats(prev => [
+              { ...prev[0], value: String(annual.availableBalance ?? 0) },
+              { ...prev[1], value: String(annual.pendingAmount ?? 0) },
+              { ...prev[2], value: String(annual.approvedUsed ?? 0) },
+              prev[3],
+            ]);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading stats', err);
+      }
+    }
+    loadStats();
+  }, []);
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-      {dashboardStats.map((stat, i) => {
+      {stats.map((stat, i) => {
         const config = cardConfigs[i] ?? cardConfigs[0];
         return (
           <div

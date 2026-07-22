@@ -137,19 +137,36 @@ async function seed() {
         [policyName, lbCountry.id, wfId],
       );
       policyId = pol.id;
-
-      // Seed rule for Annual leave
-      const [annualLt] = await qr.query(`SELECT id FROM leave_types WHERE key = 'annual'`);
-      if (annualLt) {
-        await qr.query(
-          `INSERT INTO leave_rules ("policy_id", "leave_type_id", "entitlement_days", "is_accrued", "cut_off_type", "reset_type")
-           VALUES ($1, $2, 20.00, false, 'HIRE_DATE', 'NONE')`,
-          [policyId, annualLt.id],
-        );
-      }
       console.log(`  ✓ Policy seeded: ${policyName}`);
     } else {
       policyId = existingPol[0].id;
+    }
+
+    // Seed additional rules
+    const leaveTypesToSeed = [
+      { key: 'annual', entitlement: 20.00 },
+      { key: 'sick', entitlement: 10.00 },
+      { key: 'unpaid', entitlement: 0.00 },
+      { key: 'maternity', entitlement: 90.00 },
+      { key: 'bereavement', entitlement: 3.00 },
+    ];
+
+    for (const ltData of leaveTypesToSeed) {
+      const [lt] = await qr.query(`SELECT id FROM leave_types WHERE key = $1`, [ltData.key]);
+      if (lt) {
+        // Check if rule already exists
+        const [existingRule] = await qr.query(
+          `SELECT id FROM leave_rules WHERE policy_id = $1 AND leave_type_id = $2`,
+          [policyId, lt.id]
+        );
+        if (!existingRule) {
+          await qr.query(
+            `INSERT INTO leave_rules ("policy_id", "leave_type_id", "entitlement_days", "is_accrued", "cut_off_type", "reset_type")
+             VALUES ($1, $2, $3, false, 'HIRE_DATE', 'NONE')`,
+            [policyId, lt.id, ltData.entitlement],
+          );
+        }
+      }
     }
 
     // ── 6. Seed Sample Employees ───────────────────────────────────────────
