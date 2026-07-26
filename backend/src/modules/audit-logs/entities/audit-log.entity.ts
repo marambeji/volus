@@ -57,4 +57,8 @@ export class AuditLog {
 
   @Column({ name: 'correlation_id', type: 'uuid', nullable: true })
   correlationId?: string | null;
+
+  /** Human-readable description generated at log time */
+  @Column({ type: 'text', nullable: true })
+  description?: string | null;
 }

@@ -105,27 +105,36 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
 
   const totalDays = Object.values(dailyAmounts).reduce((sum, val) => sum + val, 0);
 
-  // Validations
-  let validationError = '';
+  // Hard errors (block submission)
+  let blockingError = '';
+  // Soft warning (overdraft allowed)
+  let overdraftWarning = '';
   if (selectedLeaveConfig) {
     if (selectedLeaveConfig.eligible === false) {
-      validationError = selectedLeaveConfig.ineligibilityReasons.join(' ');
+      blockingError = selectedLeaveConfig.ineligibilityReasons.join(' ');
     } else if (startDate && endDate) {
       if (minRequestDays > 0 && totalDays < minRequestDays) {
-        validationError = `Request must be at least ${minRequestDays} day(s).`;
+        blockingError = `Request must be at least ${minRequestDays} day(s).`;
       } else if (maxRequestDays !== null && maxRequestDays !== undefined && totalDays > maxRequestDays) {
-        validationError = `Request cannot exceed ${maxRequestDays} day(s).`;
+        blockingError = `Request cannot exceed ${maxRequestDays} day(s).`;
       } else if (maxConsecutiveDays !== null && maxConsecutiveDays !== undefined && totalDays > maxConsecutiveDays) {
-        validationError = `Request cannot exceed ${maxConsecutiveDays} consecutive chargeable day(s).`;
-      } else if (requiresPositiveBalance && trackingMode === 'AVAILABLE_BALANCE' && (availableBalance - totalDays) < 0) {
-        validationError = `Insufficient balance. You need ${totalDays} day(s) but only have ${availableBalance}.`;
-      } else if (requiresNote && !reason.trim()) {
-        validationError = `A note is required for this leave type.`;
-      } else if (requiresDocument) {
-        validationError = `A supporting document is required for this leave type (Secure attachment service is missing).`;
+        blockingError = `Request cannot exceed ${maxConsecutiveDays} consecutive chargeable day(s).`;
+      } else if (trackingMode === 'AVAILABLE_BALANCE' && (availableBalance - totalDays) < 0) {
+        // Overdraft is allowed — warn but do not block
+        const deficit = Math.abs(availableBalance - totalDays);
+        overdraftWarning = `Your balance will go negative by ${deficit} day(s). The request will be submitted but your balance will be −${Math.abs(availableBalance - totalDays)}d.`;
+      }
+      if (!blockingError) {
+        if (requiresNote && !reason.trim()) {
+          blockingError = `A note is required for this leave type.`;
+        } else if (requiresDocument) {
+          blockingError = `A supporting document is required for this leave type (Secure attachment service is missing).`;
+        }
       }
     }
   }
+  // Keep legacy alias for any remaining references
+  const validationError = blockingError;
 
   // Mini calendar cells generation
   const calYear = calDate.getFullYear();
@@ -177,7 +186,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (validationError) return;
+    if (blockingError) return;
     
     try {
       await submitLeaveRequest({
@@ -353,10 +362,17 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
 
                 <div className="lg:col-span-7 flex flex-col gap-6">
                   
-                  {validationError && (
+                  {blockingError && (
                     <div className="bg-red-50 text-red-600 p-3 rounded-xl border border-red-100 flex items-start gap-2 text-sm">
                       <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-                      <p>{validationError}</p>
+                      <p>{blockingError}</p>
+                    </div>
+                  )}
+
+                  {overdraftWarning && !blockingError && (
+                    <div className="bg-amber-50 text-amber-700 p-3 rounded-xl border border-amber-200 flex items-start gap-2 text-sm">
+                      <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-amber-500" />
+                      <p>{overdraftWarning}</p>
                     </div>
                   )}
 

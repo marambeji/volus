@@ -123,20 +123,13 @@ export class LeaveRequestsService {
         });
       }
 
-      // 4. Validate sufficient leave balances
+      // 4. Validate leave type is in active policy (overdraft is allowed — balance may go negative)
       const balancesData = await this.leaveBalancesService.calculateBalancesForEmployee(employeeId);
       const balanceConfig = balancesData.balances.find((b) => b.leaveTypeId === dto.leaveTypeId);
       if (!balanceConfig) {
         throw new BadRequestException('Leave type is not available in your active policy.');
       }
-
-      if (balanceConfig.requiresPositiveBalance && balanceConfig.trackingMode === 'AVAILABLE_BALANCE') {
-        if (balanceConfig.availableBalance < dto.durationDays) {
-          throw new BadRequestException(
-            `Insufficient balance. You need ${dto.durationDays} day(s) but only have ${balanceConfig.availableBalance}.`,
-          );
-        }
-      }
+      // NOTE: overdraft is intentionally permitted — balance will be stored as negative.
 
       // Create snapshot representation
       const snapshot = {
@@ -175,12 +168,17 @@ export class LeaveRequestsService {
       await em.save(instances);
 
       // 7. Write audit log
+      const logRequest = await em.findOne(LeaveRequest, {
+        where: { id: savedRequest.id },
+        relations: { leaveType: true, employee: true },
+      });
+
       await this.auditService.log(
         employeeId,
         AuditActionType.LEAVE_REQUEST_SUBMITTED,
         'LeaveRequest',
         savedRequest.id,
-        { newValues: savedRequest },
+        { newValues: logRequest || savedRequest },
         em,
       );
 
@@ -221,6 +219,8 @@ export class LeaveRequestsService {
       requestId: inst.requestId,
       stepOrder: inst.stepOrder,
       approverType: inst.approverType,
+      employeeId: inst.request?.employeeId,
+      leaveTypeId: inst.request?.leaveTypeId,
       employeeName: inst.request?.employee?.fullName,
       leaveTypeName: inst.request?.leaveType?.label,
       startDate: inst.request?.startDate,
@@ -349,13 +349,19 @@ export class LeaveRequestsService {
         // Apply ledger usage atomically exactly once
         await this.applyLedger(em, request, LedgerTransactionType.USAGE, actorId);
 
+        // Load relations for description clarity
+        const logRequest = await em.findOne(LeaveRequest, {
+          where: { id: request.id },
+          relations: { leaveType: true, employee: true },
+        });
+
         // Audit request approval
         await this.auditService.log(
           actorId,
           AuditActionType.LEAVE_REQUEST_APPROVED,
           'LeaveRequest',
           request.id,
-          { newValues: request },
+          { newValues: logRequest || request },
           em,
         );
       }
@@ -458,13 +464,19 @@ export class LeaveRequestsService {
       request.rejectionReason = reason;
       await em.save(request);
 
+      // Load relations for description clarity
+      const logRequest = await em.findOne(LeaveRequest, {
+        where: { id: request.id },
+        relations: { leaveType: true, employee: true },
+      });
+
       // Audit request rejection
       await this.auditService.log(
         actorId,
         AuditActionType.LEAVE_REQUEST_REJECTED,
         'LeaveRequest',
         request.id,
-        { newValues: request, reason },
+        { newValues: logRequest || request, reason },
         em,
       );
 
@@ -521,13 +533,19 @@ export class LeaveRequestsService {
       request.status = LeaveRequestStatus.CANCELLED;
       const saved = await em.save(request);
 
+      // Load relations for description clarity
+      const logRequest = await em.findOne(LeaveRequest, {
+        where: { id: request.id },
+        relations: { leaveType: true, employee: true },
+      });
+
       // Audit request cancellation
       await this.auditService.log(
         employeeId,
         AuditActionType.LEAVE_REQUEST_CANCELLED,
         'LeaveRequest',
         request.id,
-        { newValues: request },
+        { newValues: logRequest || request },
         em,
       );
 

@@ -121,6 +121,7 @@ export class EmployeesService {
       department: employee.department,
       unit: employee.unit,
       managerId: employee.managerId,
+      manager: employee.manager?.fullName ?? null,
       countryId: employee.countryId,
       country: employee.country?.name,
       countryCode: employee.country?.code,
@@ -248,14 +249,15 @@ export class EmployeesService {
       return savedEmployee.id;
     });
 
+    const createdEmployee = await this.findOne(savedId);
+
     // Log creation
     await this.auditLogsService.log(actorId ?? null, AuditActionType.EMPLOYEE_CREATED, 'Employee', savedId, {
-      newValues: { ...dto },
+      newValues: createdEmployee,
       reason: 'New employee onboarded',
     });
 
-    // Load after transaction commits so all relations are visible
-    return this.findOne(savedId);
+    return createdEmployee;
   }
 
   // ── FindAll ──────────────────────────────────────────────────────────────────
@@ -314,6 +316,7 @@ export class EmployeesService {
         division: true,
         approvalWorkflow: true,
         policyAssignments: true,
+        manager: true,
       },
     });
     if (!employee) throw new NotFoundException(`Employee #${id} not found.`);
@@ -403,7 +406,7 @@ export class EmployeesService {
   async update(id: string, dto: UpdateEmployeeDto, actorId?: string) {
     const employee = await this.employeeRepo.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: { policyAssignments: true },
+      relations: { policyAssignments: true, country: true, division: true, approvalWorkflow: true, manager: true },
     });
     if (!employee) throw new NotFoundException(`Employee #${id} not found.`);
 
@@ -563,6 +566,7 @@ export class EmployeesService {
   async remove(id: string, actorId?: string): Promise<void> {
     const employee = await this.employeeRepo.findOne({
       where: { id, deletedAt: IsNull() },
+      relations: { country: true, division: true, approvalWorkflow: true, manager: true },
     });
     if (!employee) throw new NotFoundException(`Employee #${id} not found.`);
 

@@ -9,6 +9,7 @@ import {
 import { getEmployees } from '../../services/employeesApi';
 import { toAdminEmployee } from '../../services/mappers/employeeMapper';
 import { getBalances } from '../../services/balancesApi';
+import { apiFetch } from '../../services/apiClient';
 
 // ─── Mock Approval Configurations ──────────────────────────────────────────────
 const mockApprovalLevels: ApprovalConfiguration[] = [
@@ -405,23 +406,43 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
     async function loadData() {
       try {
-        const [backendEmps, backendBals] = await Promise.all([
+        const [backendEmps] = await Promise.all([
           getEmployees(),
-          getBalances(),
         ]);
 
         if (!active) return;
 
         const mappedEmps = backendEmps.map(toAdminEmployee);
-        const mappedBals = backendBals.map((b) => ({
-          employeeId: b.employeeId,
-          leaveTypeId: b.leaveTypeId,
-          leaveType: (b.leaveType?.key || 'annual') as LeaveTypeKey,
-          amount: Number(b.availableBalance),
-        }));
+        
+        // Fetch calculated balances for each employee from the backend service engine
+        const balancePromises = mappedEmps.map(async (emp) => {
+          try {
+            const calculated = await apiFetch<any>(`/leave-balances/employee/${emp.id}`);
+            return (calculated?.balances || []).map((b: any) => ({
+              employeeId: emp.id,
+              leaveTypeId: b.leaveTypeId,
+              code: b.code || b.leaveType,
+              leaveType: (b.code || b.leaveType || 'annual') as LeaveTypeKey,
+              amount: Number(b.available ?? b.availableBalance ?? 0),
+              entitlement: Number(b.entitlement ?? b.annualEntitlement ?? 0),
+              earned: Number(b.earned ?? b.accruedAmount ?? 0),
+              adjustments: Number(b.adjustments ?? b.manualAdjustments ?? 0),
+              used: Number(b.used ?? b.approvedUsed ?? 0),
+              pending: Number(b.pending ?? b.pendingAmount ?? 0),
+              available: Number(b.available ?? b.availableBalance ?? 0),
+              remaining: Number(b.remaining ?? b.availableBalance ?? 0),
+            }));
+          } catch {
+            return [];
+          }
+        });
+
+        const allCalculatedBals = (await Promise.all(balancePromises)).flat();
 
         dispatch({ type: 'SET_EMPLOYEES', payload: mappedEmps });
-        dispatch({ type: 'SET_BALANCES', payload: mappedBals });
+        if (allCalculatedBals.length > 0) {
+          dispatch({ type: 'SET_BALANCES', payload: allCalculatedBals });
+        }
       } catch (err) {
         console.error('Failed to load live employees/balances:', err);
       }

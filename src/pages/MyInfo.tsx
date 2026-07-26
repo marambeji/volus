@@ -5,16 +5,7 @@ import Badge from '../components/ui/Badge';
 import { leaveBalancesList, leaveLedgerList, leaveRequestsList, leaveTypesList } from '../data/mockData';
 import { apiFetch } from '../services/apiClient';
 
-const myInfo = {
-  id: 1,
-  name: 'Gabriel Habre',
-  role: 'Senior Software Engineer',
-  department: 'Engineering',
-  email: 'gabriel.habre@novelus.com',
-  phone: '+961 3 123 456',
-  location: 'Beirut, Lebanon',
-  startDate: 'March 12, 2021',
-};
+
 
 export default function MyInfo() {
   const [selectedLeaveType, setSelectedLeaveType] = useState('annual');
@@ -23,14 +14,20 @@ export default function MyInfo() {
   const [requests, setRequests] = useState<any[]>(leaveRequestsList);
   const [balances, setBalances] = useState<any[]>(leaveBalancesList);
   const [ledger] = useState(leaveLedgerList);
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [realRequests, realBalancesData] = await Promise.all([
+        const [realRequests, realBalancesData, meData] = await Promise.all([
           apiFetch<any[]>('/leave-requests/my-requests').catch(() => null),
           apiFetch<any>('/employees/me/leave-balances').catch(() => null),
+          apiFetch<any>('/employees/me').catch(() => null),
         ]);
+
+        if (meData) {
+          setProfile(meData);
+        }
 
         if (realRequests && realRequests.length > 0) {
           const mapped = realRequests.map((r) => ({
@@ -59,6 +56,17 @@ export default function MyInfo() {
     void loadData();
   }, []);
 
+  // Build display values from profile (real) or fallback
+  const displayName     = profile?.fullName     ?? '—';
+  const displayRole     = profile?.jobTitle      ?? '—';
+  const displayDept     = profile?.department    ?? '—';
+  const displayEmail    = profile?.email         ?? '—';
+  const displayPhone    = profile?.phone         ?? '—';
+  const displayLocation = profile?.country       ? `${profile.country}` : '—';
+  const displayStart    = profile?.hireDate
+    ? new Date(profile.hireDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '—';
+
   function handleRecall(requestId: number) {
     setRequests(
       requests.map((r) => (r.id === requestId ? { ...r, status: 'pending' as const } : r))
@@ -77,12 +85,12 @@ export default function MyInfo() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col items-center gap-4 text-center justify-center">
-          <Avatar name={myInfo.name} size="lg" />
+          <Avatar name={displayName} size="lg" />
           <div>
-            <h2 className="text-slate-800 font-extrabold text-lg">{myInfo.name}</h2>
-            <p className="text-slate-400 text-xs mt-0.5">{myInfo.role}</p>
+            <h2 className="text-slate-800 font-extrabold text-lg">{displayName}</h2>
+            <p className="text-slate-400 text-xs mt-0.5">{displayRole}</p>
             <div className="mt-2.5">
-              <Badge label={myInfo.department} variant="department" />
+              <Badge label={displayDept} variant="department" />
             </div>
           </div>
         </div>
@@ -95,7 +103,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Email</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.email}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayEmail}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -104,7 +112,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Phone</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.phone}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayPhone}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -113,7 +121,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Location</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.location}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayLocation}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -122,7 +130,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Start Date</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.startDate}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayStart}</p>
             </div>
           </div>
         </div>
@@ -139,11 +147,16 @@ export default function MyInfo() {
             const label = item.name || item.label || key;
             const isSelected = selectedLeaveType === key || selectedLeaveType === item.leaveTypeId;
 
+            // Equation data
+            const total = item.annualEntitlement ?? 0;
+            const used = Number(item.approvedUsed ?? item.usageYtd ?? 0);
+            const remaining = Number(value);
+
             return (
               <div
                 key={key}
                 onClick={() => setSelectedLeaveType(key)}
-                className={`flex-shrink-0 w-36 p-4 rounded-xl border transition-all cursor-pointer ${isSelected
+                className={`flex-shrink-0 w-40 p-4 rounded-xl border transition-all cursor-pointer ${isSelected
                     ? 'bg-blue-600 border-blue-600 text-white shadow-md'
                     : 'bg-white border-slate-100 text-slate-700 hover:border-blue-200'
                   }`}
@@ -158,6 +171,18 @@ export default function MyInfo() {
                 <p className={`text-xs truncate font-medium mt-1 ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
                   {label}
                 </p>
+                {/* Equation: total - used = remaining (for available balance types) */}
+                {!isUsageYtd && total > 0 && (
+                  <p className={`text-[10px] font-mono mt-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                    {total} − {used} = {remaining}j
+                  </p>
+                )}
+                {/* Equation: used for usage YTD types */}
+                {isUsageYtd && total > 0 && (
+                  <p className={`text-[10px] font-mono mt-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                    {used}j / {total}j max
+                  </p>
+                )}
               </div>
             );
           })}
