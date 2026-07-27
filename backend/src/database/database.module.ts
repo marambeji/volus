@@ -34,7 +34,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         return {
           type: 'postgres',
           ...baseConfig,
-          ...sslConfig, // always applied; empty object when DB_SSL=false
+          // SSL must be provided even when using a connection URL, because
+          // the pg driver does NOT inherit it from the URL string itself.
+          ...(ssl ? { ssl: { rejectUnauthorized } } : {}),
+          // extra.ssl is the pg-level option — needed for Supabase pooler (port 6543)
+          extra: ssl ? { ssl: { rejectUnauthorized } } : {},
           autoLoadEntities: true,
           synchronize: false,
           logging: configService.get<string>('NODE_ENV') !== 'production',

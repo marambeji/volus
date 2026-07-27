@@ -91,7 +91,28 @@ export class LeaveBalancesService {
       where: { employeeId, status: LeaveRequestStatus.PENDING },
     });
 
-    const results = [];
+    const results: {
+      leaveTypeId: string;
+      code: string;
+      name: string;
+      color: string;
+      trackingMode: any;
+      openingBalance: number;
+      annualEntitlement: number;
+      accruedAmount: number;
+      projectedAccrual: number;
+      carriedOverAmount: number;
+      manualAdjustments: number;
+      approvedUsed: number;
+      pendingAmount: number;
+      availableBalance: number;
+      usageYtd: number;
+      allowsHalfDay: boolean;
+      requiresNote: boolean;
+      requiresDocument: boolean;
+      requiresPositiveBalance: boolean;
+    }[] = [];
+
 
     for (const rule of (policy.rules || [])) {
       if (!rule.leaveType || !rule.leaveType.isActive) continue;

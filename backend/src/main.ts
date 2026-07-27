@@ -2,6 +2,13 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 dotenv.config({ path: path.join(__dirname, '..', '.env'), override: true });
 
+// When connecting to Supabase/managed DBs with a self-signed cert chain,
+// the pg driver ignores TypeORM's ssl.rejectUnauthorized when using a connection URL.
+// Setting this env var before any module loads is the only reliable fix.
+if (process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
