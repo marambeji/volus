@@ -8,9 +8,10 @@ interface Props {
   message: string;
   confirmLabel?: string;
   danger?: boolean;
+  confirming?: boolean;
 }
 
-export default function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmLabel = 'Confirm', danger = false }: Props) {
+export default function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmLabel = 'Confirm', danger = false, confirming = false }: Props) {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -26,8 +27,9 @@ export default function ConfirmModal({ isOpen, onClose, onConfirm, title, messag
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} /></button>
         </div>
         <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">Cancel</button>
-          <button onClick={() => { onConfirm(); onClose(); }} className={`flex-1 px-4 py-2.5 text-sm font-bold text-white rounded-xl transition-colors cursor-pointer ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-violet-600 hover:bg-violet-700'}`}>
+          <button onClick={onClose} disabled={confirming} className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-xl transition-colors cursor-pointer">Cancel</button>
+          <button onClick={() => { onConfirm(); onClose(); }} disabled={confirming} className={`flex-1 px-4 py-2.5 text-sm font-bold text-white rounded-xl transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-violet-600 hover:bg-violet-700'}`}>
+            {confirming ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
             {confirmLabel}
           </button>
         </div>

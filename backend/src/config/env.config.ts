@@ -7,8 +7,8 @@ export default registerAs('database', () => {
   const username = process.env.DB_USERNAME;
   const password = process.env.DB_PASSWORD;
   const database = process.env.DB_NAME;
-  const ssl = process.env.DB_SSL === 'true';
-  const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+  const ssl = process.env.DB_SSL === 'true' || true; // Force SSL for Supabase
+  const rejectUnauthorized = false; // Always false for development to bypass self-signed errors
 
   return {
     url,

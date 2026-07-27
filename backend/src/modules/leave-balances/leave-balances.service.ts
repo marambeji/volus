@@ -91,28 +91,7 @@ export class LeaveBalancesService {
       where: { employeeId, status: LeaveRequestStatus.PENDING },
     });
 
-    const results: {
-      leaveTypeId: string;
-      code: string;
-      name: string;
-      color: string;
-      trackingMode: any;
-      openingBalance: number;
-      annualEntitlement: number;
-      accruedAmount: number;
-      projectedAccrual: number;
-      carriedOverAmount: number;
-      manualAdjustments: number;
-      approvedUsed: number;
-      pendingAmount: number;
-      availableBalance: number;
-      usageYtd: number;
-      allowsHalfDay: boolean;
-      requiresNote: boolean;
-      requiresDocument: boolean;
-      requiresPositiveBalance: boolean;
-    }[] = [];
-
+    const results: any[] = [];
 
     for (const rule of (policy.rules || [])) {
       if (!rule.leaveType || !rule.leaveType.isActive) continue;
@@ -154,23 +133,39 @@ export class LeaveBalancesService {
         .filter(r => r.leaveTypeId === leaveTypeId)
         .reduce((sum, r) => sum + Number(r.durationDays), 0);
 
-      const availableBalance = openingBalance + accruedAmount + carriedOverAmount + manualAdjustments - approvedUsed;
-      
+      const entitlement = Number(rule.entitlementDays) || 0;
+
+      // For USAGE_YTD types (e.g. Maternity, Paternity), treat entitlement as the
+      // opening pool and compute remaining = entitlement - approvedUsed.
+      // For BALANCE types (e.g. Annual, Sick), use the full ledger formula.
+      const availableBalance =
+        rule.leaveType.trackingMode === LeaveTrackingMode.USAGE_YTD
+          ? Math.max(0, entitlement - approvedUsed)
+          : openingBalance + accruedAmount + carriedOverAmount + manualAdjustments - approvedUsed;
+
       results.push({
         leaveTypeId: rule.leaveType.id,
+        leaveTypeName: rule.leaveType.label,
         code: rule.leaveType.key,
         name: rule.leaveType.label,
         color: rule.leaveType.color || '#7C3AED',
         trackingMode: rule.leaveType.trackingMode,
+        entitlement,
+        earned: accruedAmount,
+        adjustments: manualAdjustments,
+        used: approvedUsed,
+        pending: pendingAmount,
+        available: availableBalance,
+        remaining: availableBalance,
         openingBalance,
-        annualEntitlement: Number(rule.entitlementDays) || 0,
+        annualEntitlement: entitlement,
         accruedAmount,
         projectedAccrual: 0,
         carriedOverAmount,
         manualAdjustments,
         approvedUsed,
         pendingAmount,
-        availableBalance: rule.leaveType.trackingMode === LeaveTrackingMode.USAGE_YTD ? 0 : availableBalance,
+        availableBalance,
         usageYtd: approvedUsed,
         allowsHalfDay: rule.allowsHalfDay ?? false,
         requiresNote: rule.requiresNote ?? false,

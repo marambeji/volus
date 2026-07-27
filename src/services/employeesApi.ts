@@ -123,6 +123,14 @@ export async function submitLeaveRequest(
   });
 }
 
+export async function getApprovalProgress(requestId: string, signal?: AbortSignal): Promise<any> {
+  return apiFetch<any>(`/leave-requests/${requestId}/approval-progress`, { signal });
+}
+
+export async function getMyLeaveRequests(signal?: AbortSignal): Promise<any[]> {
+  return apiFetch<any[]>(`/leave-requests/my-requests`, { signal });
+}
+
 export async function getDirectory(
   query?: { q?: string; department?: string; page?: number; limit?: number },
   signal?: AbortSignal

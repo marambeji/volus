@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Archive, UserCheck, Eye, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Archive, UserCheck, Eye, AlertCircle, CheckCircle, History } from 'lucide-react';
 import { useAdmin } from '../store/AdminContext';
 import type { AdminEmployee } from '../types/adminTypes';
 import SearchInput from '../components/ui/SearchInput';
@@ -7,6 +7,7 @@ import { SelectFilter } from '../components/ui/SelectFilter';
 import StatusBadge from '../components/ui/StatusBadge';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
+import HistoryDrawer from '../components/HistoryDrawer';
 import { createEmployee, updateEmployee, deleteEmployee } from '../../services/employeesApi';
 import { toAdminEmployee, toBackendEmployeePayload } from '../../services/mappers/employeeMapper';
 
@@ -42,6 +43,7 @@ export default function EmployeeList() {
   const [viewEmp, setViewEmp] = useState<AdminEmployee | null>(null);
   const [editEmp, setEditEmp] = useState<AdminEmployee | null>(null);
   const [deleteId, setDeleteId] = useState<number | string | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<{ entityType: string; entityId: string; name: string } | null>(null);
   
   // Form State & Validation / Loaders
   const [form, setForm] = useState<Omit<AdminEmployee, 'id'> & { id?: number | string }>(emptyForm());
@@ -243,6 +245,7 @@ export default function EmployeeList() {
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => setHistoryTarget({ entityType: 'Employee', entityId: String(emp.id), name: emp.name })} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer" title="Audit History"><History size={14}/></button>
                         <button onClick={() => setViewEmp(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors cursor-pointer" title="View"><Eye size={14}/></button>
                         <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer" title="Edit"><Edit2 size={14}/></button>
                         <button onClick={() => toggleStatus(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer" title="Toggle Status">
@@ -448,6 +451,15 @@ export default function EmployeeList() {
         message={`Are you sure you want to permanently delete ${state.employees.find(e => e.id === deleteId)?.name}? This action cannot be undone.`}
         confirmLabel="Delete"
         danger
+      />
+
+      {/* Audit History Drawer */}
+      <HistoryDrawer
+        isOpen={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        entityType={historyTarget?.entityType || ''}
+        entityId={historyTarget?.entityId || ''}
+        entityName={historyTarget?.name}
       />
     </div>
   );

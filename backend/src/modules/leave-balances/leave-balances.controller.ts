@@ -27,12 +27,12 @@ export class LeaveBalancesController {
   }
 
   @Get('employee/:employeeId')
-  @ApiOperation({ summary: 'Get all balance records for a given employee' })
+  @ApiOperation({ summary: 'Get calculated balance records for a given employee' })
   findByEmployee(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
     @Query('year') year?: number,
   ) {
-    return this.service.findByEmployee(
+    return this.service.calculateBalancesForEmployee(
       employeeId,
       year ? Number(year) : undefined,
     );

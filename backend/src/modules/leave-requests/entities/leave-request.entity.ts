@@ -4,12 +4,14 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Employee } from '../../employees/entities/employee.entity';
 import { LeaveType } from '../../leave-types/entities/leave-type.entity';
 import { LeaveRequestStatus } from '../../../common/enums';
+import { ApprovalInstance } from './approval-instance.entity';
 
 @Entity('leave_requests')
 export class LeaveRequest {
@@ -71,9 +73,16 @@ export class LeaveRequest {
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
   rejectionReason?: string | null;
 
+  @Column({ name: 'workflow_snapshot', type: 'jsonb', nullable: true })
+  workflowSnapshot?: any | null;
+
+  @OneToMany(() => ApprovalInstance, (ai) => ai.request, { cascade: true })
+  approvalInstances?: ApprovalInstance[];
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
 }
+

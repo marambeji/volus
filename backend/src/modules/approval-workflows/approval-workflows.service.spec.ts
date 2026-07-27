@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -10,6 +6,7 @@ import { ApprovalWorkflowsService } from './approval-workflows.service';
 import { ApprovalWorkflow } from './entities/approval-workflow.entity';
 import { ApprovalWorkflowStep } from './entities/approval-workflow-step.entity';
 import { ApproverType } from '../../common/enums';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 describe('ApprovalWorkflowsService (Unit Tasks)', () => {
   let service: ApprovalWorkflowsService;
@@ -23,6 +20,10 @@ describe('ApprovalWorkflowsService (Unit Tasks)', () => {
         {
           provide: getRepositoryToken(ApprovalWorkflowStep),
           useValue: mockRepo,
+        },
+        {
+          provide: AuditLogsService,
+          useValue: { log: jest.fn() },
         },
         {
           provide: DataSource,
@@ -92,10 +93,8 @@ describe('ApprovalWorkflowsService (Unit Tasks)', () => {
         },
         {
           stepOrder: 3,
-          approverType: ApproverType.SPECIFIC_PERSON,
-          specificApproverEmail: 'approver@example.com',
+          approverType: ApproverType.HR,
         },
-        { stepOrder: 4, approverType: ApproverType.HR },
       ] as any;
       expect(() => (service as any).validateSteps(steps)).not.toThrow();
     });

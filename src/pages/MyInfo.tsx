@@ -1,26 +1,80 @@
-import { useState } from 'react';
-import { Mail, Phone, MapPin, CalendarDays, ArrowRightLeft, History, RefreshCcw, XCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mail, Phone, MapPin, CalendarDays, ArrowRightLeft, History, RefreshCcw, XCircle, Eye } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
 import Badge from '../components/ui/Badge';
+import SlideDrawer from '../admin/components/ui/SlideDrawer';
+import ApprovalProgressTimeline from '../components/ui/ApprovalProgressTimeline';
 import { leaveBalancesList, leaveLedgerList, leaveRequestsList, leaveTypesList } from '../data/mockData';
-
-const myInfo = {
-  id: 1,
-  name: 'Gabriel Habre',
-  role: 'Senior Software Engineer',
-  department: 'Engineering',
-  email: 'gabriel.habre@novelus.com',
-  phone: '+961 3 123 456',
-  location: 'Beirut, Lebanon',
-  startDate: 'March 12, 2021',
-};
+import { apiFetch } from '../services/apiClient';
 
 export default function MyInfo() {
   const [selectedLeaveType, setSelectedLeaveType] = useState('annual');
   const [selectedYear, setSelectedYear] = useState('2026');
   const [tableMode, setTableMode] = useState<'requests' | 'ledger'>('requests');
-  const [requests, setRequests] = useState(leaveRequestsList);
+  const [requests, setRequests] = useState<any[]>(leaveRequestsList);
+  const [balances, setBalances] = useState<any[]>(leaveBalancesList);
   const [ledger] = useState(leaveLedgerList);
+  const [profile, setProfile] = useState<any>(null);
+  const [selectedReq, setSelectedReq] = useState<any | null>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [realRequests, realBalancesData, meData] = await Promise.all([
+          apiFetch<any[]>('/leave-requests/my-requests').catch(() => null),
+          apiFetch<any>('/employees/me/leave-balances').catch(() => null),
+          apiFetch<any>('/employees/me').catch(() => null),
+        ]);
+
+        if (meData) {
+          setProfile(meData);
+        }
+
+        if (realRequests && realRequests.length > 0) {
+          const mapped = realRequests.map((r) => ({
+            id: r.id,
+            leaveType: r.leaveType?.key || r.leaveType?.label || 'annual',
+            leaveTypeId: r.leaveTypeId,
+            leaveTypeName: r.leaveType?.label || r.leaveType?.key || 'Annual Leave',
+            startDate: r.startDate,
+            endDate: r.endDate,
+            note: r.reason || '',
+            submittedDate: r.createdAt || new Date().toISOString(),
+            approverComments: r.approvalInstances?.map((ai: any) => ai.decisionNote).filter(Boolean).join('; ') || '',
+            status: r.status ? r.status.toLowerCase() : 'pending',
+            totalDays: r.durationDays,
+            approvalInstances: r.approvalInstances || [],
+            rejectionReason: r.rejectionReason,
+            currentStepOrder: r.currentStepOrder,
+            totalRequiredSteps: r.totalRequiredSteps,
+            currentApproverLabel: r.currentApproverLabel,
+          }));
+          setRequests(mapped);
+        }
+
+        if (realBalancesData && realBalancesData.balances && realBalancesData.balances.length > 0) {
+          setBalances(realBalancesData.balances);
+        }
+      } catch (err) {
+        console.error('Failed to load real MyInfo data:', err);
+      }
+    }
+    void loadData();
+    const handleRefetch = () => { void loadData(); };
+    window.addEventListener('leave-request-submitted', handleRefetch);
+    return () => { window.removeEventListener('leave-request-submitted', handleRefetch); };
+  }, []);
+
+  // Build display values from profile (real) or fallback
+  const displayName     = profile?.fullName     ?? '—';
+  const displayRole     = profile?.jobTitle      ?? '—';
+  const displayDept     = profile?.department    ?? '—';
+  const displayEmail    = profile?.email         ?? '—';
+  const displayPhone    = profile?.phone         ?? '—';
+  const displayLocation = profile?.country       ? `${profile.country}` : '—';
+  const displayStart    = profile?.hireDate
+    ? new Date(profile.hireDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '—';
 
   function handleRecall(requestId: number) {
     setRequests(
@@ -40,12 +94,12 @@ export default function MyInfo() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col items-center gap-4 text-center justify-center">
-          <Avatar name={myInfo.name} size="lg" />
+          <Avatar name={displayName} size="lg" />
           <div>
-            <h2 className="text-slate-800 font-extrabold text-lg">{myInfo.name}</h2>
-            <p className="text-slate-400 text-xs mt-0.5">{myInfo.role}</p>
+            <h2 className="text-slate-800 font-extrabold text-lg">{displayName}</h2>
+            <p className="text-slate-400 text-xs mt-0.5">{displayRole}</p>
             <div className="mt-2.5">
-              <Badge label={myInfo.department} variant="department" />
+              <Badge label={displayDept} variant="department" />
             </div>
           </div>
         </div>
@@ -58,7 +112,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Email</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.email}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayEmail}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -67,7 +121,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Phone</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.phone}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayPhone}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -76,7 +130,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Location</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.location}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayLocation}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -85,7 +139,7 @@ export default function MyInfo() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase">Start Date</p>
-              <p className="text-slate-700 text-sm font-semibold">{myInfo.startDate}</p>
+              <p className="text-slate-700 text-sm font-semibold">{displayStart}</p>
             </div>
           </div>
         </div>
@@ -95,28 +149,49 @@ export default function MyInfo() {
       <div>
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Leave Balances</h3>
         <div className="flex gap-4 overflow-x-auto pb-3">
-          {leaveTypesList.map((type) => {
-            const balance = leaveBalancesList.find((b) => b.leaveType === type.key);
-            const value = balance ? balance.amount : 0;
+          {balances.map((item) => {
+            const key = item.code || item.leaveType || item.leaveTypeId || 'annual';
+            const isUsageYtd = item.trackingMode === 'USAGE_YTD';
+            const value = isUsageYtd ? (item.usageYtd ?? item.amount ?? 0) : (item.availableBalance ?? item.amount ?? 0);
+            const label = item.name || item.label || key;
+            const isSelected = selectedLeaveType === key || selectedLeaveType === item.leaveTypeId;
+
+            // Equation data
+            const total = item.annualEntitlement ?? 0;
+            const used = Number(item.approvedUsed ?? item.usageYtd ?? 0);
+            const remaining = Number(value);
+
             return (
               <div
-                key={type.key}
-                onClick={() => setSelectedLeaveType(type.key)}
-                className={`flex-shrink-0 w-36 p-4 rounded-xl border transition-all cursor-pointer ${selectedLeaveType === type.key
+                key={key}
+                onClick={() => setSelectedLeaveType(key)}
+                className={`flex-shrink-0 w-40 p-4 rounded-xl border transition-all cursor-pointer ${isSelected
                     ? 'bg-blue-600 border-blue-600 text-white shadow-md'
                     : 'bg-white border-slate-100 text-slate-700 hover:border-blue-200'
                   }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: type.color }} />
-                  <span className={`text-[10px] font-bold ${selectedLeaveType === type.key ? 'text-blue-100' : 'text-slate-400'}`}>
-                    {type.isAccrued ? 'Available' : 'Used YTD'}
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color || '#3B82F6' }} />
+                  <span className={`text-[10px] font-bold ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                    {isUsageYtd ? 'Used YTD' : 'Available'}
                   </span>
                 </div>
                 <p className="text-2xl font-extrabold">{value}d</p>
-                <p className={`text-xs truncate font-medium mt-1 ${selectedLeaveType === type.key ? 'text-blue-100' : 'text-slate-500'}`}>
-                  {type.label}
+                <p className={`text-xs truncate font-medium mt-1 ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                  {label}
                 </p>
+                {/* Equation: total - used = remaining (for available balance types) */}
+                {!isUsageYtd && total > 0 && (
+                  <p className={`text-[10px] font-mono mt-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                    {total} − {used} = {remaining}j
+                  </p>
+                )}
+                {/* Equation: used for usage YTD types */}
+                {isUsageYtd && total > 0 && (
+                  <p className={`text-[10px] font-mono mt-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                    {used}j / {total}j max
+                  </p>
+                )}
               </div>
             );
           })}
@@ -140,9 +215,16 @@ export default function MyInfo() {
               onChange={(e) => setSelectedLeaveType(e.target.value)}
               className="px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
             >
-              {leaveTypesList.map((t) => (
-                <option key={t.key} value={t.key}>{t.label}</option>
-              ))}
+              <option value="all">All Leave Types</option>
+              {balances.map((b) => {
+                const val = b.code || b.leaveType || b.leaveTypeId;
+                const lbl = b.name || b.label || val;
+                return (
+                  <option key={val} value={val}>
+                    {lbl}
+                  </option>
+                );
+              })}
             </select>
 
             {/* Filter Year */}
@@ -181,7 +263,14 @@ export default function MyInfo() {
 
         {/* Table Render */}
         {tableMode === 'requests' ? (() => {
-          const filteredRequests = requests.filter((r) => r.leaveType === selectedLeaveType);
+          const filteredRequests = requests.filter((r) => {
+            if (!selectedLeaveType || selectedLeaveType === 'all') return true;
+            const s = selectedLeaveType.toLowerCase();
+            const rType = (r.leaveType || '').toLowerCase();
+            const rTypeId = (r.leaveTypeId || '').toLowerCase();
+            const rLabel = (r.leaveTypeName || '').toLowerCase();
+            return rType === s || rTypeId === s || rLabel === s;
+          });
           return (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
@@ -191,7 +280,7 @@ export default function MyInfo() {
                     <th className="py-3 px-4 text-center">Leave Type</th>
                     <th className="py-3 px-4 text-center">Note</th>
                     <th className="py-3 px-4 text-center">Submitted</th>
-                    <th className="py-3 px-4 text-center">Comments</th>
+                    <th className="py-3 px-4 text-center">Progress</th>
                     <th className="py-3 px-4 text-center">Status</th>
                     <th className="py-3 px-4 text-center">(-)</th>
                     <th className="py-3 px-4 text-center">Actions</th>
@@ -206,7 +295,11 @@ export default function MyInfo() {
                     </tr>
                   ) : (
                     filteredRequests.map((req) => (
-                      <tr key={req.id} className="hover:bg-slate-50/60 transition-colors">
+                      <tr
+                        key={req.id}
+                        onClick={() => setSelectedReq(req)}
+                        className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                      >
                         <td className="py-3 px-4 text-center text-slate-600 whitespace-nowrap">
                           {new Date(req.startDate).toLocaleDateString('en-GB')}
                           {req.startDate !== req.endDate && (
@@ -214,14 +307,22 @@ export default function MyInfo() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-center font-semibold text-slate-700 whitespace-nowrap">
-                          {leaveTypesList.find((t) => t.key === req.leaveType)?.label}
+                          {req.leaveTypeName || leaveTypesList.find((t) => t.key === req.leaveType)?.label || req.leaveType}
                         </td>
                         <td className="py-3 px-4 text-center text-slate-500 max-w-[160px] truncate">{req.note || '—'}</td>
                         <td className="py-3 px-4 text-center text-slate-400 whitespace-nowrap">
                           {new Date(req.submittedDate).toLocaleDateString('en-GB')}
                         </td>
-                        <td className="py-3 px-4 text-center text-slate-400 italic text-xs">
-                          {req.approverComments || '—'}
+                        <td className="py-3 px-4 text-center">
+                          {req.approvalInstances && req.approvalInstances.length > 0 ? (
+                            <ApprovalProgressTimeline
+                              steps={req.approvalInstances}
+                              requestStatus={req.status.toUpperCase()}
+                              compact={true}
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -235,8 +336,15 @@ export default function MyInfo() {
                         <td className="py-3 px-4 text-center font-bold text-slate-700">
                           {req.totalDays}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedReq(req)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                              title="View Approval Progress"
+                            >
+                              <Eye size={14} />
+                            </button>
                             <button
                               onClick={() => handleRecall(req.id)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
@@ -275,36 +383,68 @@ export default function MyInfo() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredLedger.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-sm font-semibold text-slate-500">
-                        You have no balance history
-                      </td>
+                  {filteredLedger.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3 px-4 text-center text-slate-500 whitespace-nowrap">{row.date}</td>
+                      <td className="py-3 px-4 font-medium text-slate-700">{row.description}</td>
+                      <td className="py-3 px-4 text-center font-semibold text-slate-600">{row.used ? `-${row.used}` : '—'}</td>
+                      <td className="py-3 px-4 text-center font-semibold text-emerald-600">{row.earned ? `+${row.earned}` : '—'}</td>
+                      <td className="py-3 px-4 text-center font-extrabold text-slate-800">{row.runningBalance}</td>
                     </tr>
-                  ) : (
-                    filteredLedger.map((entry) => (
-                      <tr key={entry.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-4 text-center text-slate-500 whitespace-nowrap">
-                          {new Date(entry.date).toLocaleDateString('en-GB')}
-                        </td>
-                        <td className="py-3 px-4 text-slate-700 font-medium">{entry.description}</td>
-                        <td className="py-3 px-4 text-center font-bold text-red-600">
-                          {entry.change < 0 ? `${entry.change}d` : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-center font-bold text-emerald-600">
-                          {entry.change > 0 ? `+${entry.change}d` : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-center font-extrabold text-slate-800">{entry.balance}d</td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           );
         })()}
+
+        {/* Approval Progress Details Drawer */}
+        <SlideDrawer
+          isOpen={!!selectedReq}
+          onClose={() => setSelectedReq(null)}
+          title="Approval Progress & Request Details"
+          subtitle={selectedReq ? `${selectedReq.leaveTypeName} (${selectedReq.totalDays} ${selectedReq.totalDays === 1 ? 'day' : 'days'})` : ''}
+        >
+          {selectedReq && (
+            <div className="p-6 flex flex-col gap-6">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/80 flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Dates</span>
+                  <span className="text-xs font-extrabold text-slate-800 dark:text-white">
+                    {new Date(selectedReq.startDate).toLocaleDateString('en-GB')} → {new Date(selectedReq.endDate).toLocaleDateString('en-GB')}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Overall Status</span>
+                  <span className="text-xs font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                    {selectedReq.status}
+                  </span>
+                </div>
+                {selectedReq.note && (
+                  <div className="mt-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Note</span>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 italic bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700">
+                      "{selectedReq.note}"
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-4">
+                  Approval Timeline
+                </h3>
+                <ApprovalProgressTimeline
+                  submittedAt={selectedReq.submittedDate}
+                  steps={selectedReq.approvalInstances || []}
+                  requestStatus={selectedReq.status.toUpperCase()}
+                  rejectionReason={selectedReq.rejectionReason}
+                />
+              </div>
+            </div>
+          )}
+        </SlideDrawer>
       </div>
     </div>
   );
 }
-

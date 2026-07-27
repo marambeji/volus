@@ -15,6 +15,11 @@ export interface ApprovalConfiguration {
   levels: ApprovalLevel[];
   description?: string;
   createdAt: string;
+  countryId?: string;
+  leaveTypeId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
 }
 
 export interface SeniorityMilestone {

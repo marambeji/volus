@@ -19,7 +19,8 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
 import { paginate } from '../../common/dto/pagination.dto';
 import { DirectoryEmployeeDto, PaginatedDirectoryResponse } from './dto/directory-employee.dto';
-import { EmployeeStatus, LedgerTransactionType } from '../../common/enums';
+import { EmployeeStatus, LedgerTransactionType, AuditActionType } from '../../common/enums';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class EmployeesService {
@@ -36,6 +37,7 @@ export class EmployeesService {
     private readonly divisionRepo: Repository<Division>,
     @InjectRepository(ApprovalWorkflow)
     private readonly workflowRepo: Repository<ApprovalWorkflow>,
+    private readonly auditLogsService: AuditLogsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -119,6 +121,7 @@ export class EmployeesService {
       department: employee.department,
       unit: employee.unit,
       managerId: employee.managerId,
+      manager: employee.manager?.fullName ?? null,
       countryId: employee.countryId,
       country: employee.country?.name,
       countryCode: employee.country?.code,
@@ -140,7 +143,7 @@ export class EmployeesService {
 
   // ── Create ───────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateEmployeeDto) {
+  async create(dto: CreateEmployeeDto, actorId?: string) {
     const email = this.normalizeEmail(dto.email);
     const existing = await this.employeeRepo.findOne({
       where: { email, deletedAt: IsNull() },
@@ -154,7 +157,7 @@ export class EmployeesService {
     const country = await this.resolveCountry(dto.countryCode);
     await this.validateManager(null, dto.managerId);
 
-    let policy: LeavePolicy | null = null;
+    let policy: any = null;
     if (dto.policyId) {
       policy = await this.policyRepo.findOne({
         where: { id: dto.policyId },
@@ -246,8 +249,15 @@ export class EmployeesService {
       return savedEmployee.id;
     });
 
-    // Load after transaction commits so all relations are visible
-    return this.findOne(savedId);
+    const createdEmployee = await this.findOne(savedId);
+
+    // Log creation
+    await this.auditLogsService.log(actorId ?? null, AuditActionType.EMPLOYEE_CREATED, 'Employee', savedId, {
+      newValues: createdEmployee,
+      reason: 'New employee onboarded',
+    });
+
+    return createdEmployee;
   }
 
   // ── FindAll ──────────────────────────────────────────────────────────────────
@@ -306,6 +316,7 @@ export class EmployeesService {
         division: true,
         approvalWorkflow: true,
         policyAssignments: true,
+        manager: true,
       },
     });
     if (!employee) throw new NotFoundException(`Employee #${id} not found.`);
@@ -392,12 +403,14 @@ export class EmployeesService {
 
   // ── Update ───────────────────────────────────────────────────────────────────
 
-  async update(id: string, dto: UpdateEmployeeDto) {
+  async update(id: string, dto: UpdateEmployeeDto, actorId?: string) {
     const employee = await this.employeeRepo.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: { policyAssignments: true },
+      relations: { policyAssignments: true, country: true, division: true, approvalWorkflow: true, manager: true },
     });
     if (!employee) throw new NotFoundException(`Employee #${id} not found.`);
+
+    const oldValues = this.serializeEmployee(employee);
 
     if (dto.email && this.normalizeEmail(dto.email) !== employee.email) {
       const email = this.normalizeEmail(dto.email);
@@ -535,24 +548,43 @@ export class EmployeesService {
       return id;
     });
 
+    const updatedEmployee = await this.findOne(id);
+
+    // Log update
+    await this.auditLogsService.log(actorId ?? null, AuditActionType.EMPLOYEE_UPDATED, 'Employee', id, {
+      oldValues: oldValues,
+      newValues: updatedEmployee,
+      reason: 'Employee profile or policy updated',
+    });
+
     // Load after transaction commits so all relations are visible
-    return this.findOne(id);
+    return updatedEmployee;
   }
 
   // ── Remove ───────────────────────────────────────────────────────────────────
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorId?: string): Promise<void> {
     const employee = await this.employeeRepo.findOne({
       where: { id, deletedAt: IsNull() },
+      relations: { country: true, division: true, approvalWorkflow: true, manager: true },
     });
     if (!employee) throw new NotFoundException(`Employee #${id} not found.`);
 
     // Clear managerId for direct reports
     await this.employeeRepo.update({ managerId: id }, { managerId: null });
 
+    const oldValues = this.serializeEmployee(employee);
+
     employee.status = EmployeeStatus.ARCHIVED;
     employee.deletedAt = new Date();
     await this.employeeRepo.save(employee);
+
+    // Log deletion
+    await this.auditLogsService.log(actorId ?? null, AuditActionType.EMPLOYEE_DELETED, 'Employee', id, {
+      oldValues: oldValues,
+      newValues: { status: EmployeeStatus.ARCHIVED, deletedAt: employee.deletedAt },
+      reason: 'Employee archived/deleted',
+    });
   }
 
   // ── Leave Configuration ──────────────────────────────────────────────────────────

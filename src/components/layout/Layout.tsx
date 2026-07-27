@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Menu, Sun, Moon, Bell, LogOut } from 'lucide-react';
 import Navbar from './Navbar';
 import Chatbot from '../ui/Chatbot';
+import NotificationDropdown from './NotificationDropdown';
 
 interface LayoutProps {
   children: ReactNode;
@@ -63,10 +64,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             </button>
 
             {/* Notifications */}
-            <button className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
-              <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            <NotificationDropdown />
 
             {/* User Avatar Info */}
             <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200">

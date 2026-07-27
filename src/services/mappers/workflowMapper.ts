@@ -21,7 +21,12 @@ export interface BackendWorkflowStepResponse {
 export interface BackendWorkflowResponse {
   id: string;
   name: string;
+  description: string | null;
   status: 'ACTIVE' | 'INACTIVE';
+  countryId: string;
+  leaveTypeId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
   steps: BackendWorkflowStepResponse[];
   createdAt?: string;
   updatedAt?: string;
@@ -29,7 +34,12 @@ export interface BackendWorkflowResponse {
 
 export interface CreateWorkflowDto {
   name: string;
+  description?: string | null;
   status: 'ACTIVE' | 'INACTIVE';
+  countryId: string;
+  leaveTypeId: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
   steps: {
     stepOrder: number;
     approverType: BackendApproverType;
@@ -41,7 +51,12 @@ export interface CreateWorkflowDto {
 
 export interface UpdateWorkflowDto {
   name?: string;
+  description?: string | null;
   status?: 'ACTIVE' | 'INACTIVE';
+  countryId?: string;
+  leaveTypeId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
   steps?: {
     stepOrder: number;
     approverType: BackendApproverType;
@@ -82,9 +97,15 @@ export function mapBackendApproverTypeToFrontend(type: BackendApproverType): Fro
 }
 
 export function frontendWorkflowToCreateDto(config: ApprovalConfiguration): CreateWorkflowDto {
+  const todayStr = new Date().toISOString().split('T')[0];
   return {
     name: config.name.trim(),
-    status: 'ACTIVE',
+    description: config.description?.trim() || null,
+    status: config.status || 'ACTIVE',
+    countryId: config.countryId || '',
+    leaveTypeId: config.leaveTypeId || '',
+    effectiveFrom: config.effectiveFrom || todayStr,
+    effectiveTo: config.effectiveTo || null,
     steps: config.levels.map((lvl, idx) => {
       const isSpecific = lvl.type === 'specific_employee';
       const emailVal = isSpecific && lvl.specificEmployeeEmail?.trim() ? lvl.specificEmployeeEmail.trim() : null;
@@ -115,7 +136,12 @@ export function workflowResponseToFrontendWorkflow(res: BackendWorkflowResponse)
     name: res.name,
     levelsCount: levels.length,
     levels: levels.length > 0 ? levels : [{ type: 'manager' }],
-    description: undefined,
+    description: res.description || undefined,
+    countryId: res.countryId,
+    leaveTypeId: res.leaveTypeId,
+    effectiveFrom: res.effectiveFrom ? res.effectiveFrom.split('T')[0] : undefined,
+    effectiveTo: res.effectiveTo ? res.effectiveTo.split('T')[0] : undefined,
+    status: res.status,
     createdAt: res.createdAt ? res.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
   };
 }

@@ -8,6 +8,7 @@ import {
   IsUUID,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApproverType } from '../../../common/enums';
 
 export class CreateWorkflowStepDto {
@@ -23,11 +24,13 @@ export class CreateWorkflowStepDto {
   @ApiPropertyOptional({ example: 'c6a2b8e0-1234-5678-90ab-cdef12345678' })
   @IsUUID()
   @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   specificApproverId?: string;
 
   @ApiPropertyOptional({ example: 'approver@example.com' })
   @IsEmail()
   @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   specificApproverEmail?: string;
 
   @ApiPropertyOptional({ example: true })

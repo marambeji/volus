@@ -11,6 +11,7 @@ import { LeaveLedgerEntry } from '../leave-balances/entities/leave-ledger-entry.
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
       LeaveLedgerEntry,
     ]),
     LeaveBalancesModule,
+    AuditLogsModule,
   ],
   controllers: [EmployeesController],
   providers: [EmployeesService],

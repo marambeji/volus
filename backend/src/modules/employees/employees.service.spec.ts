@@ -12,6 +12,7 @@ import { Country } from '../countries/entities/country.entity';
 import { Division } from '../divisions/entities/division.entity';
 import { ApprovalWorkflow } from '../approval-workflows/entities/approval-workflow.entity';
 import { EmployeeStatus } from '../../common/enums';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 describe('EmployeesService Unit Tests', () => {
   let service: EmployeesService;
@@ -57,6 +58,12 @@ describe('EmployeesService Unit Tests', () => {
         { provide: getRepositoryToken(Country), useValue: countryRepo },
         { provide: getRepositoryToken(Division), useValue: {} },
         { provide: getRepositoryToken(ApprovalWorkflow), useValue: {} },
+        {
+          provide: AuditLogsService,
+          useValue: {
+            log: jest.fn().mockResolvedValue({}),
+          },
+        },
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();

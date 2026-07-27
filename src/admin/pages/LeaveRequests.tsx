@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Check, X, MessageSquare, Download, Calendar } from 'lucide-react';
+import { Check, X, MessageSquare, Download, Calendar, History } from 'lucide-react';
 import { useAdmin } from '../store/AdminContext';
 import SearchInput from '../components/ui/SearchInput';
 import { SelectFilter } from '../components/ui/SelectFilter';
 import StatusBadge from '../components/ui/StatusBadge';
 import SlideDrawer from '../components/ui/SlideDrawer';
+import HistoryDrawer from '../components/HistoryDrawer';
 import { hrGetLeaveRequests, hrApproveLeaveRequest, hrRejectLeaveRequest } from '../../services/adminApi';
 
 const leaveTypeOptions = [
@@ -37,6 +38,7 @@ export default function LeaveRequests() {
   const [hrNote, setHrNote] = useState('');
   const [noteId, setNoteId] = useState<number | string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<{ entityType: string; entityId: string; name: string } | null>(null);
 
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,10 +200,17 @@ export default function LeaveRequests() {
                       <td className="py-3.5 px-4 text-center"><StatusBadge status={req.currentStatus.toLowerCase() as any} /></td>
                       <td className="py-3.5 px-4" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
-                          {req.currentStatus === 'PENDING' && (<>
-                            <button onClick={() => handleApprove(req.requestId)} className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 cursor-pointer" title="Approve"><Check size={14}/></button>
-                            <button onClick={() => { setRejectId(req.requestId); setRejectComment(''); }} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer" title="Reject"><X size={14}/></button>
-                          </>)}
+                          <button onClick={() => setHistoryTarget({ entityType: 'LeaveRequest', entityId: req.requestId, name: `${req.employeeName} Request` })} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer" title="Audit History"><History size={14}/></button>
+                          {req.canApprove ? (
+                            <>
+                              <button onClick={() => handleApprove(req.requestId)} className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 cursor-pointer" title="Approve"><Check size={14}/></button>
+                              <button onClick={() => { setRejectId(req.requestId); setRejectComment(''); }} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer" title="Reject"><X size={14}/></button>
+                            </>
+                          ) : req.currentStatus === 'PENDING' ? (
+                            <span className="text-[10px] italic font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg border border-amber-200/60 dark:border-amber-900/50">
+                              Waiting for Manager approval
+                            </span>
+                          ) : null}
                           <button onClick={() => { setNoteId(req.requestId); setHrNote(req.hrNote ?? ''); }} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer" title="Add Note"><MessageSquare size={14}/></button>
                         </div>
                       </td>
@@ -285,6 +294,14 @@ export default function LeaveRequests() {
           </div>
         </div>
       )}
+      {/* Audit History Drawer */}
+      <HistoryDrawer
+        isOpen={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        entityType={historyTarget?.entityType || ''}
+        entityId={historyTarget?.entityId || ''}
+        entityName={historyTarget?.name}
+      />
     </div>
   );
 }

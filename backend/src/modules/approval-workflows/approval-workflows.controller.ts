@@ -10,6 +10,8 @@ import {
   Post,
   Put,
   Query,
+  Headers,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApprovalWorkflowsService } from './approval-workflows.service';
@@ -24,8 +26,22 @@ export class ApprovalWorkflowsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a workflow with steps' })
-  create(@Body() dto: CreateApprovalWorkflowDto) {
-    return this.service.create(dto);
+  create(
+    @Headers('x-employee-id') actorId: string,
+    @Body() dto: CreateApprovalWorkflowDto,
+  ) {
+    if (!actorId) throw new UnauthorizedException('Missing x-employee-id header');
+    return this.service.create(dto, actorId);
+  }
+
+  @Get('resolve')
+  @ApiOperation({ summary: 'Resolve a workflow by country, leave type, and effective date' })
+  resolve(
+    @Query('countryId', ParseUUIDPipe) countryId: string,
+    @Query('leaveTypeId', ParseUUIDPipe) leaveTypeId: string,
+    @Query('effectiveDate') effectiveDate: string,
+  ) {
+    return this.service.resolveWorkflow(countryId, leaveTypeId, effectiveDate);
   }
 
   @Get()
@@ -45,16 +61,22 @@ export class ApprovalWorkflowsController {
     summary: 'Update a workflow and replace its steps atomically',
   })
   update(
+    @Headers('x-employee-id') actorId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateApprovalWorkflowDto,
   ) {
-    return this.service.update(id, dto);
+    if (!actorId) throw new UnauthorizedException('Missing x-employee-id header');
+    return this.service.update(id, dto, actorId);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft-delete a workflow' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.remove(id);
+  remove(
+    @Headers('x-employee-id') actorId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    if (!actorId) throw new UnauthorizedException('Missing x-employee-id header');
+    return this.service.remove(id, actorId);
   }
 }

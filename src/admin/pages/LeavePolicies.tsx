@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, AlertCircle, RefreshCw, Eye, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, AlertCircle, RefreshCw, Eye, FileText, History } from 'lucide-react';
 import type { CountryPolicy, LeaveQuota } from '../types/adminTypes';
 import type { LeaveTypeKey } from '../../types';
 import SearchInput from '../components/ui/SearchInput';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
+import HistoryDrawer from '../components/HistoryDrawer';
 import { getCountries } from '../../services/countriesApi';
 import type { CountryItem } from '../../services/countriesApi';
 import { getDivisions } from '../../services/divisionsApi';
@@ -89,6 +90,7 @@ export default function LeavePolicies() {
 
   const [activeTab, setActiveTab] = useState<'general' | 'quotas'>('general');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [historyTarget, setHistoryTarget] = useState<{ entityType: string; entityId: string; name: string } | null>(null);
 
   const loadData = async (signal?: AbortSignal) => {
     setLoading(true);
@@ -411,6 +413,16 @@ export default function LeavePolicies() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHistoryTarget({ entityType: 'LeavePolicy', entityId: policy.id, name: policy.policyName });
+                      }}
+                      className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-indigo-600 rounded-xl transition-colors cursor-pointer"
+                      title="Audit History"
+                    >
+                      <History size={13} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1173,6 +1185,16 @@ export default function LeavePolicies() {
         message="Are you sure you want to permanently delete this leave policy? This action cannot be undone."
         confirmLabel="Delete"
         danger
+        confirming={saving}
+      />
+
+      {/* Audit History Drawer */}
+      <HistoryDrawer
+        isOpen={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        entityType={historyTarget?.entityType || ''}
+        entityId={historyTarget?.entityId || ''}
+        entityName={historyTarget?.name}
       />
     </div>
   );
