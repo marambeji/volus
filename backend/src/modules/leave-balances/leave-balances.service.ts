@@ -91,7 +91,7 @@ export class LeaveBalancesService {
       where: { employeeId, status: LeaveRequestStatus.PENDING },
     });
 
-    const results = [];
+    const results: any[] = [];
 
     for (const rule of (policy.rules || [])) {
       if (!rule.leaveType || !rule.leaveType.isActive) continue;

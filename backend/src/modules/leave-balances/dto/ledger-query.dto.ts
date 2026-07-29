@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
@@ -31,6 +32,7 @@ export class LedgerQueryDto extends PaginationQueryDto {
   @IsInt()
   @Min(2000)
   @Max(2100)
+  @Type(() => Number)
   @IsOptional()
   year?: number;
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, CalendarDays, FileText, Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2, Upload } from 'lucide-react';
 import { getMyLeaveBalances, submitLeaveRequest } from '../../services/employeesApi';
+import { getLeaveTypes } from '../../services/leaveTypesApi';
 
 interface RequestModalProps {
   isOpen: boolean;
@@ -27,17 +28,47 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
   const [calDate, setCalDate] = useState(new Date());
 
   // Fetch Configuration
+  // Fetch Configuration & Leave Types
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
       setErrorMsg('');
       const fetchConfig = async () => {
         try {
-          const conf = await getMyLeaveBalances();
-          setConfig(conf);
-          if (conf.balances && conf.balances.length > 0) {
-             const defaultType = conf.balances.find((t: any) => t.code === 'ANNUAL') || conf.balances[0];
-             setTypeId(defaultType.leaveTypeId);
+          const [conf, allLeaveTypes] = await Promise.all([
+            getMyLeaveBalances().catch(() => ({ balances: [] })),
+            getLeaveTypes().catch(() => []),
+          ]);
+
+          const existingBalances = conf?.balances || [];
+          const balanceTypeIds = new Set(existingBalances.map((b: any) => b.leaveTypeId));
+
+          // Merge leave types that might not have active policy rules/balances calculated yet
+          const combinedBalances = [...existingBalances];
+          for (const lt of allLeaveTypes) {
+            if (!balanceTypeIds.has(lt.id)) {
+              combinedBalances.push({
+                leaveTypeId: lt.id,
+                code: lt.key.toUpperCase(),
+                name: lt.label,
+                availableBalance: 0,
+                usageYtd: 0,
+                trackingMode: lt.trackingMode,
+                allowsHalfDay: true,
+                requiresNote: false,
+                requiresDocument: false,
+                requiresPositiveBalance: false,
+                eligible: true,
+              });
+            }
+          }
+
+          const finalConfig = { ...(conf || {}), balances: combinedBalances };
+          setConfig(finalConfig);
+
+          if (combinedBalances.length > 0) {
+            const defaultType = combinedBalances.find((t: any) => t.code === 'ANNUAL') || combinedBalances[0];
+            setTypeId(defaultType.leaveTypeId);
           }
         } catch (error: any) {
           setErrorMsg(error.message || 'Failed to load leave balances.');
@@ -197,6 +228,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
         reason,
       });
       setSubmitted(true);
+      window.dispatchEvent(new Event('leave-request-submitted'));
       setTimeout(() => {
         onClose();
       }, 2000);

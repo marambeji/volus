@@ -69,7 +69,8 @@ export class ApprovalWorkflowsService {
       .andWhere('wf.status = :status', { status: ApprovalWorkflowStatus.ACTIVE })
       .andWhere('wf.effectiveFrom <= :effectiveDate', { effectiveDate })
       .andWhere('(wf.effectiveTo IS NULL OR wf.effectiveTo >= :effectiveDate)', { effectiveDate })
-      .orderBy('steps.stepOrder', 'ASC')
+      .orderBy('wf.createdAt', 'DESC')
+      .addOrderBy('steps.stepOrder', 'ASC')
       .getOne();
   }
 
@@ -109,7 +110,9 @@ export class ApprovalWorkflowsService {
           workflowId: savedWorkflow.id,
           stepOrder: s.stepOrder,
           approverType: s.approverType,
-          specificApproverId: s.specificApproverId ?? null,
+          departmentId: s.departmentId ?? null,
+          specificApproverEmployeeId: s.specificApproverEmployeeId ?? s.specificApproverId ?? null,
+          specificApproverId: s.specificApproverId ?? s.specificApproverEmployeeId ?? null,
           specificApproverEmail: s.specificApproverEmail ?? null,
           isRequired: s.isRequired ?? true,
         }),
@@ -215,7 +218,9 @@ export class ApprovalWorkflowsService {
             workflowId: id,
             stepOrder: s.stepOrder,
             approverType: s.approverType,
-            specificApproverId: s.specificApproverId ?? null,
+            departmentId: s.departmentId ?? null,
+            specificApproverEmployeeId: s.specificApproverEmployeeId ?? s.specificApproverId ?? null,
+            specificApproverId: s.specificApproverId ?? s.specificApproverEmployeeId ?? null,
             specificApproverEmail: s.specificApproverEmail ?? null,
             isRequired: s.isRequired ?? true,
           }),

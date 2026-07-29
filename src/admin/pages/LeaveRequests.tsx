@@ -201,10 +201,16 @@ export default function LeaveRequests() {
                       <td className="py-3.5 px-4" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => setHistoryTarget({ entityType: 'LeaveRequest', entityId: req.requestId, name: `${req.employeeName} Request` })} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer" title="Audit History"><History size={14}/></button>
-                          {req.currentStatus === 'PENDING' && (<>
-                            <button onClick={() => handleApprove(req.requestId)} className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 cursor-pointer" title="Approve"><Check size={14}/></button>
-                            <button onClick={() => { setRejectId(req.requestId); setRejectComment(''); }} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer" title="Reject"><X size={14}/></button>
-                          </>)}
+                          {req.canApprove ? (
+                            <>
+                              <button onClick={() => handleApprove(req.requestId)} className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 cursor-pointer" title="Approve"><Check size={14}/></button>
+                              <button onClick={() => { setRejectId(req.requestId); setRejectComment(''); }} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer" title="Reject"><X size={14}/></button>
+                            </>
+                          ) : req.currentStatus === 'PENDING' ? (
+                            <span className="text-[10px] italic font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg border border-amber-200/60 dark:border-amber-900/50">
+                              Waiting for Manager approval
+                            </span>
+                          ) : null}
                           <button onClick={() => { setNoteId(req.requestId); setHrNote(req.hrNote ?? ''); }} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer" title="Add Note"><MessageSquare size={14}/></button>
                         </div>
                       </td>

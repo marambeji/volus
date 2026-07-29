@@ -9,6 +9,8 @@ import FullCalendar from './pages/FullCalendar';
 import Login from './pages/Login';
 import AdminApp from './admin/AdminApp';
 
+import LeaveTracking from './pages/LeaveTracking';
+
 interface UserSession {
   id: string;
   name: string;
@@ -75,6 +77,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/employee/dashboard" replace />} />
           <Route path="/employee/dashboard" element={<Home />} />
           <Route path="/employee/my-info" element={<MyInfo />} />
+          <Route path="/employee/leave-tracking" element={<LeaveTracking />} />
           <Route path="/employee/people" element={<People />} />
           
           {/* Protect Route: prevent employees (non-managers) from opening /employee/approval-dashboard */}

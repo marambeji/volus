@@ -189,7 +189,7 @@ async function seed() {
       },
       {
         fullName: 'Maram El-Din',
-        email: 'maram@novelus.com',
+        email: 'maram@volus.com',
         jobTitle: 'Senior Frontend Developer',
         department: 'Engineering',
         role: 'EMPLOYEE',

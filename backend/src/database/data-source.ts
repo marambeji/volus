@@ -11,6 +11,7 @@ import { AddHRReviewFields1784677005679 } from './migrations/1784677005679-AddHR
 import { WorkflowAndAuditSchema1784680000000 } from './migrations/1784680000000-WorkflowAndAuditSchema';
 import { AddDescriptionToAuditLogs1784760000000 } from './migrations/1784760000000-AddDescriptionToAuditLogs';
 import { AddUniqueLedgerConstraints1784770000000 } from './migrations/1784770000000-AddUniqueLedgerConstraints';
+import { AddSpecificApproverDepartmentAndEmployeeId1784780000001 } from './migrations/1784780000001-AddSpecificApproverDepartmentAndEmployeeId';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
@@ -51,6 +52,7 @@ export const AppDataSource = new DataSource({
     WorkflowAndAuditSchema1784680000000,
     AddDescriptionToAuditLogs1784760000000,
     AddUniqueLedgerConstraints1784770000000,
+    AddSpecificApproverDepartmentAndEmployeeId1784780000001,
   ],
   logging: true,
 });

@@ -28,6 +28,12 @@ export class ApprovalWorkflowStep {
   @Column({ name: 'approver_type', type: 'enum', enum: ApproverType })
   approverType: ApproverType;
 
+  @Column({ name: 'department_id', type: 'varchar', length: 255, nullable: true })
+  departmentId: string | null;
+
+  @Column({ name: 'specific_approver_employee_id', type: 'uuid', nullable: true })
+  specificApproverEmployeeId: string | null;
+
   @Column({ name: 'specific_approver_id', type: 'uuid', nullable: true })
   specificApproverId: string | null;
 

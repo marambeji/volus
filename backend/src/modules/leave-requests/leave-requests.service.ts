@@ -70,7 +70,7 @@ export class LeaveRequestsService {
       }
 
       // 3. Resolve approvers for the workflow steps and validate their presence
-      const resolvedSteps = [];
+      const resolvedSteps: any[] = [];
       for (const step of workflow.steps) {
         let resolvedApproverId: string | null = null;
 
@@ -94,8 +94,9 @@ export class LeaveRequestsService {
           }
           resolvedApproverId = employee.manager.managerId;
         } else if (step.approverType === ApproverType.SPECIFIC_PERSON) {
-          if (step.specificApproverId) {
-            resolvedApproverId = step.specificApproverId;
+          const empId = (step as any).specificApproverEmployeeId || step.specificApproverId;
+          if (empId) {
+            resolvedApproverId = empId;
           } else if (step.specificApproverEmail) {
             const specEmp = await em.findOne(Employee, {
               where: { email: step.specificApproverEmail },
@@ -269,7 +270,6 @@ export class LeaveRequestsService {
         if (actor.role !== EmployeeRole.HR_ADMIN) {
           throw new ForbiddenException('Only HR administrators can approve this step.');
         }
-        // Assign the HR who acted
         currentStep.resolvedApproverId = actorId;
       } else {
         if (!isResolvedMatch) {
@@ -419,7 +419,9 @@ export class LeaveRequestsService {
         currentStep.resolvedApproverId = actorId;
       } else {
         if (!isResolvedMatch) {
-          throw new ForbiddenException('You are not authorized to reject this step.');
+          throw new ConflictException(
+            'This approval step is not currently active. The request is awaiting manager approval.',
+          );
         }
       }
 
@@ -558,8 +560,13 @@ export class LeaveRequestsService {
     });
   }
 
-  async hrFindAll(query: any) {
+  async hrFindAll(query: any, actorId?: string) {
     const { status, employeeId, department, country, leaveTypeId, startDate, endDate } = query;
+
+    const actor = actorId
+      ? await this.dataSource.getRepository(Employee).findOne({ where: { id: actorId } })
+      : null;
+
     const qb = this.requestRepo
       .createQueryBuilder('lr')
       .leftJoinAndSelect('lr.employee', 'emp')
@@ -582,40 +589,72 @@ export class LeaveRequestsService {
     qb.orderBy('lr.createdAt', 'DESC');
 
     const requests = await qb.getMany();
-    return requests.map((lr) => ({
-      requestId: lr.id,
-      employeeId: lr.employeeId,
-      employeeName: lr.employee?.fullName,
-      employeeEmail: lr.employee?.email,
-      employeeNumber: lr.employee?.employeeNumber,
-      department: lr.employee?.department,
-      team: lr.employee?.unit,
-      country: lr.employee?.country?.name,
-      policyId: lr.employee?.policyAssignments?.[0]?.leavePolicyId,
-      policyName: lr.employee?.policyAssignments?.[0]?.leavePolicy?.policyName,
-      leaveTypeId: lr.leaveTypeId,
-      leaveTypeName: lr.leaveType?.label,
-      startDate: lr.startDate,
-      endDate: lr.endDate,
-      requestedDuration: lr.durationDays,
-      halfDayInformation: null,
-      employeeNote: lr.reason,
-      supportingDocumentMetadata: null,
-      currentStatus: lr.status,
-      submittedAt: lr.createdAt,
-      reviewedAt: lr.reviewedAt,
-      reviewer: lr.reviewer?.fullName,
-      rejectionReason: lr.rejectionReason,
-      workflowSnapshot: lr.workflowSnapshot,
-      approvalInstances: lr.approvalInstances?.map((ai) => ({
-        stepOrder: ai.stepOrder,
-        approverType: ai.approverType,
-        resolvedApproverName: ai.resolvedApprover?.fullName || 'Pending',
-        status: ai.status,
-        decisionNote: ai.decisionNote,
-        actionDate: ai.actionDate,
-      })),
-    }));
+    return requests.map((lr) => {
+      const instances = lr.approvalInstances || [];
+      const currentPendingStep = instances.find(
+        (ai) => ai.status === ApprovalInstanceStatus.PENDING,
+      );
+      const currentStepOrder = currentPendingStep?.stepOrder ?? null;
+      const currentApproverType = currentPendingStep?.approverType ?? null;
+      const currentStepStatus = currentPendingStep?.status ?? null;
+      const currentApproverName =
+        currentPendingStep?.resolvedApprover?.fullName ||
+        (currentPendingStep?.approverType === ApproverType.HR ? 'HR Department' : 'Pending');
+
+      let canApprove = false;
+      let canReject = false;
+
+      if (lr.status === LeaveRequestStatus.PENDING && currentPendingStep && actor) {
+        if (currentPendingStep.approverType === ApproverType.HR) {
+          canApprove = actor.role === EmployeeRole.HR_ADMIN;
+          canReject = actor.role === EmployeeRole.HR_ADMIN;
+        } else {
+          canApprove = currentPendingStep.resolvedApproverId === actor.id;
+          canReject = currentPendingStep.resolvedApproverId === actor.id;
+        }
+      }
+
+      return {
+        requestId: lr.id,
+        employeeId: lr.employeeId,
+        employeeName: lr.employee?.fullName,
+        employeeEmail: lr.employee?.email,
+        employeeNumber: lr.employee?.employeeNumber,
+        department: lr.employee?.department,
+        team: lr.employee?.unit,
+        country: lr.employee?.country?.name,
+        policyId: lr.employee?.policyAssignments?.[0]?.leavePolicyId,
+        policyName: lr.employee?.policyAssignments?.[0]?.leavePolicy?.policyName,
+        leaveTypeId: lr.leaveTypeId,
+        leaveTypeName: lr.leaveType?.label,
+        startDate: lr.startDate,
+        endDate: lr.endDate,
+        requestedDuration: lr.durationDays,
+        halfDayInformation: null,
+        employeeNote: lr.reason,
+        supportingDocumentMetadata: null,
+        currentStatus: lr.status,
+        currentStepOrder,
+        currentApproverType,
+        currentStepStatus,
+        currentApproverName,
+        canApprove,
+        canReject,
+        submittedAt: lr.createdAt,
+        reviewedAt: lr.reviewedAt,
+        reviewer: lr.reviewer?.fullName,
+        rejectionReason: lr.rejectionReason,
+        workflowSnapshot: lr.workflowSnapshot,
+        approvalInstances: instances.map((ai) => ({
+          stepOrder: ai.stepOrder,
+          approverType: ai.approverType,
+          resolvedApproverName: ai.resolvedApprover?.fullName || 'Pending',
+          status: ai.status,
+          decisionNote: ai.decisionNote,
+          actionDate: ai.actionDate,
+        })),
+      };
+    });
   }
 
   // HR Approves as override / direct action (satisfies existing HR endpoints)
@@ -626,6 +665,31 @@ export class LeaveRequestsService {
   // HR Rejects as override
   async hrReject(requestId: string, reviewerId: string, reason: string) {
     return this.rejectStep(requestId, reviewerId, reason);
+  }
+
+  async getWhosOut() {
+    const qb = this.requestRepo
+      .createQueryBuilder('lr')
+      .leftJoinAndSelect('lr.employee', 'emp')
+      .leftJoinAndSelect('lr.leaveType', 'leaveType')
+      .where('lr.status IN (:...statuses)', {
+        statuses: [LeaveRequestStatus.APPROVED, LeaveRequestStatus.PENDING],
+      })
+      .orderBy('lr.startDate', 'ASC');
+
+    const requests = await qb.getMany();
+    return requests.map((lr) => ({
+      requestId: lr.id,
+      employeeId: lr.employeeId,
+      employeeName: lr.employee?.fullName,
+      department: lr.employee?.department || 'Engineering',
+      leaveTypeId: lr.leaveTypeId,
+      leaveTypeName: lr.leaveType?.label,
+      startDate: lr.startDate,
+      endDate: lr.endDate,
+      requestedDuration: lr.durationDays,
+      status: lr.status,
+    }));
   }
 
   private async getOrCreateBalance(
@@ -707,12 +771,207 @@ export class LeaveRequestsService {
     );
   }
 
+  private getApproverRoleLabel(approverType: ApproverType): string {
+    switch (approverType) {
+      case ApproverType.MANAGER:
+        return "Employee’s Manager";
+      case ApproverType.MANAGERS_MANAGER:
+        return "Manager’s Manager";
+      case ApproverType.SPECIFIC_PERSON:
+        return "Specific Approver";
+      case ApproverType.HR:
+        return "HR Department";
+      default:
+        return "Approver";
+    }
+  }
+
+  async getApprovalProgress(requestId: string, employeeId: string) {
+    const request = await this.dataSource.getRepository(LeaveRequest).findOne({
+      where: { id: requestId },
+      relations: { approvalInstances: true, employee: true },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Leave request not found');
+    }
+
+    const actor = await this.dataSource.getRepository(Employee).findOne({ where: { id: employeeId } });
+    if (!actor || (request.employeeId !== employeeId && actor.role !== EmployeeRole.HR_ADMIN)) {
+      throw new NotFoundException('Leave request not found');
+    }
+
+    const steps = [...(request.approvalInstances || [])].sort((a, b) => a.stepOrder - b.stepOrder);
+    const currentPendingStep = steps.find((s) => s.status === ApprovalInstanceStatus.PENDING);
+
+    const totalRequiredSteps = steps.length;
+    const currentStepOrder = currentPendingStep?.stepOrder ?? null;
+    const currentApproverType = currentPendingStep?.approverType ?? null;
+    const currentApproverLabel = currentPendingStep
+      ? this.getApproverRoleLabel(currentPendingStep.approverType)
+      : null;
+
+    let finalDecision: string | null = null;
+    let finalDecisionDate: string | null = null;
+
+    if (request.status === LeaveRequestStatus.APPROVED) {
+      finalDecision = 'APPROVED';
+      finalDecisionDate = request.reviewedAt ? request.reviewedAt.toISOString() : request.updatedAt.toISOString();
+    } else if (request.status === LeaveRequestStatus.REJECTED) {
+      finalDecision = 'REJECTED';
+      finalDecisionDate = request.reviewedAt ? request.reviewedAt.toISOString() : request.updatedAt.toISOString();
+    } else if (request.status === LeaveRequestStatus.CANCELLED) {
+      finalDecision = 'CANCELLED';
+      finalDecisionDate = request.updatedAt ? request.updatedAt.toISOString() : null;
+    }
+
+    return {
+      requestId: request.id,
+      requestStatus: request.status,
+      submittedAt: request.createdAt,
+      currentStepOrder,
+      totalRequiredSteps,
+      currentApproverType,
+      currentApproverLabel,
+      finalDecision,
+      finalDecisionDate,
+      rejectionReason: request.rejectionReason ?? null,
+      steps: steps.map((s) => ({
+        approvalInstanceId: s.id,
+        stepOrder: s.stepOrder,
+        approverType: s.approverType,
+        label: this.getApproverRoleLabel(s.approverType),
+        status: s.status,
+        actionDate: s.actionDate ?? null,
+        decisionNote: s.decisionNote ?? null,
+      })),
+    };
+  }
+
+  async findOneWithOwnership(requestId: string, employeeId: string) {
+    const request = await this.requestRepo.findOne({
+      where: { id: requestId },
+      relations: { approvalInstances: true, leaveType: true, employee: true },
+    });
+
+    if (!request) throw new NotFoundException('Leave request not found');
+
+    const actor = await this.dataSource.getRepository(Employee).findOne({ where: { id: employeeId } });
+    if (!actor) throw new UnauthorizedException('Invalid employee ID');
+
+    if (request.employeeId !== employeeId && actor.role !== EmployeeRole.HR_ADMIN) {
+      throw new NotFoundException('Leave request not found');
+    }
+
+    return request;
+  }
+
   async findMyRequests(employeeId: string) {
     const requests = await this.requestRepo.find({
       where: { employeeId },
-      relations: { leaveType: true, approvalInstances: { resolvedApprover: true } },
+      relations: { leaveType: true, approvalInstances: true },
       order: { createdAt: 'DESC' },
     });
-    return requests;
+
+    return requests.map((lr) => {
+      const steps = [...(lr.approvalInstances || [])].sort((a, b) => a.stepOrder - b.stepOrder);
+      const currentPendingStep = steps.find((s) => s.status === ApprovalInstanceStatus.PENDING);
+      const currentStepOrder = currentPendingStep?.stepOrder ?? null;
+      const currentApproverType = currentPendingStep?.approverType ?? null;
+      const currentApproverLabel = currentPendingStep
+        ? this.getApproverRoleLabel(currentPendingStep.approverType)
+        : null;
+
+      return {
+        id: lr.id,
+        requestId: lr.id,
+        employeeId: lr.employeeId,
+        leaveTypeId: lr.leaveTypeId,
+        leaveType: lr.leaveType,
+        startDate: lr.startDate,
+        endDate: lr.endDate,
+        durationDays: lr.durationDays,
+        reason: lr.reason,
+        status: lr.status,
+        rejectionReason: lr.rejectionReason,
+        createdAt: lr.createdAt,
+        updatedAt: lr.updatedAt,
+        currentStepOrder,
+        totalRequiredSteps: steps.length,
+        currentApproverType,
+        currentApproverLabel,
+        approvalInstances: steps.map((s) => ({
+          approvalInstanceId: s.id,
+          stepOrder: s.stepOrder,
+          approverType: s.approverType,
+          label: this.getApproverRoleLabel(s.approverType),
+          decisionNote: s.decisionNote,
+        })),
+      };
+    });
+  }
+
+  async processExpiredRequests(): Promise<{ processedCount: number; autoApprovedIds: string[] }> {
+    const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+    const cutoffDate = new Date(Date.now() - FIVE_DAYS_MS);
+
+    // Find pending requests older than 5 days
+    const expiredRequests = await this.requestRepo
+      .createQueryBuilder('lr')
+      .leftJoinAndSelect('lr.approvalInstances', 'ai')
+      .where('lr.status = :status', { status: LeaveRequestStatus.PENDING })
+      .andWhere('lr.createdAt <= :cutoffDate', { cutoffDate })
+      .getMany();
+
+    const autoApprovedIds: string[] = [];
+
+    for (const req of expiredRequests) {
+      try {
+        await this.dataSource.transaction(async (em) => {
+          const request = await em.findOne(LeaveRequest, {
+            where: { id: req.id },
+            lock: { mode: 'pessimistic_write' },
+            relations: { approvalInstances: { step: true } },
+          });
+
+          if (!request || request.status !== LeaveRequestStatus.PENDING) return;
+
+          // Approve all pending/waiting approval instances
+          const instances = request.approvalInstances || [];
+          for (const inst of instances) {
+            if (inst.status === ApprovalInstanceStatus.PENDING || inst.status === ApprovalInstanceStatus.WAITING) {
+              inst.status = ApprovalInstanceStatus.APPROVED;
+              inst.decisionNote = 'System Auto-Approved (Expired after 5 days)';
+              inst.actionDate = new Date();
+              await em.save(inst);
+            }
+          }
+
+          // Mark request as APPROVED by System Auto-Approve
+          request.status = LeaveRequestStatus.APPROVED;
+          request.reviewedAt = new Date();
+          await em.save(request);
+
+          // Deduct ledger balance
+          await this.applyLedger(em, request, LedgerTransactionType.USAGE, request.employeeId);
+
+          // Audit log for system auto-approval
+          await this.auditService.log(
+            request.employeeId,
+            AuditActionType.LEAVE_REQUEST_APPROVED,
+            'LeaveRequest',
+            request.id,
+            { newValues: request, reason: 'Auto-approved by system (5-day expiration rule)' },
+            em,
+          );
+
+          autoApprovedIds.push(request.id);
+        });
+      } catch (e) {
+        // Continue processing remaining expired requests if one fails
+      }
+    }
+
+    return { processedCount: autoApprovedIds.length, autoApprovedIds };
   }
 }

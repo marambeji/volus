@@ -5,6 +5,8 @@ export type ApproverType = 'manager' | 'manager_manager' | 'specific_employee' |
 
 export interface ApprovalLevel {
   type: ApproverType;
+  departmentId?: string;
+  specificApproverEmployeeId?: string;
   specificEmployeeEmail?: string;
 }
 

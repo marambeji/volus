@@ -5,6 +5,7 @@ import WhosOut from '../components/dashboard/WhosOut';
 import UpcomingHolidays from '../components/dashboard/UpcomingHolidays';
 import CompanyLinks from '../components/dashboard/CompanyLinks';
 import RequestModal from '../components/dashboard/RequestModal';
+import LatestRequestCard from '../components/dashboard/LatestRequestCard';
 
 export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -29,6 +30,8 @@ export default function Home() {
 
         {/* Right sidebar */}
         <div className="flex flex-col gap-6">
+          {/* Latest Leave Request + Approval Progress */}
+          <LatestRequestCard />
           <UpcomingHolidays />
           <CompanyLinks />
         </div>

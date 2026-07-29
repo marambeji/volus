@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Mail, Phone, MapPin, CalendarDays, ArrowRightLeft, History, RefreshCcw, XCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, CalendarDays, ArrowRightLeft, History, RefreshCcw, XCircle, Eye } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
 import Badge from '../components/ui/Badge';
+import SlideDrawer from '../admin/components/ui/SlideDrawer';
+import ApprovalProgressTimeline from '../components/ui/ApprovalProgressTimeline';
 import { leaveBalancesList, leaveLedgerList, leaveRequestsList, leaveTypesList } from '../data/mockData';
 import { apiFetch } from '../services/apiClient';
-
-
 
 export default function MyInfo() {
   const [selectedLeaveType, setSelectedLeaveType] = useState('annual');
@@ -15,6 +15,7 @@ export default function MyInfo() {
   const [balances, setBalances] = useState<any[]>(leaveBalancesList);
   const [ledger] = useState(leaveLedgerList);
   const [profile, setProfile] = useState<any>(null);
+  const [selectedReq, setSelectedReq] = useState<any | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -42,6 +43,11 @@ export default function MyInfo() {
             approverComments: r.approvalInstances?.map((ai: any) => ai.decisionNote).filter(Boolean).join('; ') || '',
             status: r.status ? r.status.toLowerCase() : 'pending',
             totalDays: r.durationDays,
+            approvalInstances: r.approvalInstances || [],
+            rejectionReason: r.rejectionReason,
+            currentStepOrder: r.currentStepOrder,
+            totalRequiredSteps: r.totalRequiredSteps,
+            currentApproverLabel: r.currentApproverLabel,
           }));
           setRequests(mapped);
         }
@@ -54,6 +60,9 @@ export default function MyInfo() {
       }
     }
     void loadData();
+    const handleRefetch = () => { void loadData(); };
+    window.addEventListener('leave-request-submitted', handleRefetch);
+    return () => { window.removeEventListener('leave-request-submitted', handleRefetch); };
   }, []);
 
   // Build display values from profile (real) or fallback
@@ -271,7 +280,7 @@ export default function MyInfo() {
                     <th className="py-3 px-4 text-center">Leave Type</th>
                     <th className="py-3 px-4 text-center">Note</th>
                     <th className="py-3 px-4 text-center">Submitted</th>
-                    <th className="py-3 px-4 text-center">Comments</th>
+                    <th className="py-3 px-4 text-center">Progress</th>
                     <th className="py-3 px-4 text-center">Status</th>
                     <th className="py-3 px-4 text-center">(-)</th>
                     <th className="py-3 px-4 text-center">Actions</th>
@@ -286,7 +295,11 @@ export default function MyInfo() {
                     </tr>
                   ) : (
                     filteredRequests.map((req) => (
-                      <tr key={req.id} className="hover:bg-slate-50/60 transition-colors">
+                      <tr
+                        key={req.id}
+                        onClick={() => setSelectedReq(req)}
+                        className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                      >
                         <td className="py-3 px-4 text-center text-slate-600 whitespace-nowrap">
                           {new Date(req.startDate).toLocaleDateString('en-GB')}
                           {req.startDate !== req.endDate && (
@@ -300,8 +313,16 @@ export default function MyInfo() {
                         <td className="py-3 px-4 text-center text-slate-400 whitespace-nowrap">
                           {new Date(req.submittedDate).toLocaleDateString('en-GB')}
                         </td>
-                        <td className="py-3 px-4 text-center text-slate-400 italic text-xs">
-                          {req.approverComments || '—'}
+                        <td className="py-3 px-4 text-center">
+                          {req.approvalInstances && req.approvalInstances.length > 0 ? (
+                            <ApprovalProgressTimeline
+                              steps={req.approvalInstances}
+                              requestStatus={req.status.toUpperCase()}
+                              compact={true}
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -315,8 +336,15 @@ export default function MyInfo() {
                         <td className="py-3 px-4 text-center font-bold text-slate-700">
                           {req.totalDays}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedReq(req)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                              title="View Approval Progress"
+                            >
+                              <Eye size={14} />
+                            </button>
                             <button
                               onClick={() => handleRecall(req.id)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
@@ -355,36 +383,68 @@ export default function MyInfo() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredLedger.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-sm font-semibold text-slate-500">
-                        You have no balance history
-                      </td>
+                  {filteredLedger.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3 px-4 text-center text-slate-500 whitespace-nowrap">{row.date}</td>
+                      <td className="py-3 px-4 font-medium text-slate-700">{row.description}</td>
+                      <td className="py-3 px-4 text-center font-semibold text-slate-600">{row.used ? `-${row.used}` : '—'}</td>
+                      <td className="py-3 px-4 text-center font-semibold text-emerald-600">{row.earned ? `+${row.earned}` : '—'}</td>
+                      <td className="py-3 px-4 text-center font-extrabold text-slate-800">{row.runningBalance}</td>
                     </tr>
-                  ) : (
-                    filteredLedger.map((entry) => (
-                      <tr key={entry.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-4 text-center text-slate-500 whitespace-nowrap">
-                          {new Date(entry.date).toLocaleDateString('en-GB')}
-                        </td>
-                        <td className="py-3 px-4 text-slate-700 font-medium">{entry.description}</td>
-                        <td className="py-3 px-4 text-center font-bold text-red-600">
-                          {entry.change < 0 ? `${entry.change}d` : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-center font-bold text-emerald-600">
-                          {entry.change > 0 ? `+${entry.change}d` : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-center font-extrabold text-slate-800">{entry.balance}d</td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           );
         })()}
+
+        {/* Approval Progress Details Drawer */}
+        <SlideDrawer
+          isOpen={!!selectedReq}
+          onClose={() => setSelectedReq(null)}
+          title="Approval Progress & Request Details"
+          subtitle={selectedReq ? `${selectedReq.leaveTypeName} (${selectedReq.totalDays} ${selectedReq.totalDays === 1 ? 'day' : 'days'})` : ''}
+        >
+          {selectedReq && (
+            <div className="p-6 flex flex-col gap-6">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/80 flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Dates</span>
+                  <span className="text-xs font-extrabold text-slate-800 dark:text-white">
+                    {new Date(selectedReq.startDate).toLocaleDateString('en-GB')} → {new Date(selectedReq.endDate).toLocaleDateString('en-GB')}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Overall Status</span>
+                  <span className="text-xs font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                    {selectedReq.status}
+                  </span>
+                </div>
+                {selectedReq.note && (
+                  <div className="mt-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Note</span>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 italic bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700">
+                      "{selectedReq.note}"
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-4">
+                  Approval Timeline
+                </h3>
+                <ApprovalProgressTimeline
+                  submittedAt={selectedReq.submittedDate}
+                  steps={selectedReq.approvalInstances || []}
+                  requestStatus={selectedReq.status.toUpperCase()}
+                  rejectionReason={selectedReq.rejectionReason}
+                />
+              </div>
+            </div>
+          )}
+        </SlideDrawer>
       </div>
     </div>
   );
 }
-

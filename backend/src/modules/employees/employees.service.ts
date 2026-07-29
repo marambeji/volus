@@ -157,7 +157,7 @@ export class EmployeesService {
     const country = await this.resolveCountry(dto.countryCode);
     await this.validateManager(null, dto.managerId);
 
-    let policy = null;
+    let policy: any = null;
     if (dto.policyId) {
       policy = await this.policyRepo.findOne({
         where: { id: dto.policyId },
