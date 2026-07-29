@@ -1,17 +1,87 @@
-import { useState } from 'react';
-import { Users, Calendar, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, Calendar, ChevronRight, RefreshCw } from 'lucide-react';
 import { employeesToday, employeesTomorrow } from '../../data/mockData';
 import EmployeeCard from './EmployeeCard';
 import EmptyState from '../ui/EmptyState';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../services/apiClient';
 
 type Tab = 'today' | 'tomorrow';
 
 export default function WhosOut() {
   const [activeTab, setActiveTab] = useState<Tab>('today');
+  const [loading, setLoading] = useState(false);
+  const [todayList, setTodayList] = useState<any[]>([]);
+  const [tomorrowList, setTomorrowList] = useState<any[]>([]);
   const navigate = useNavigate();
 
-  const employees = activeTab === 'today' ? employeesToday : employeesTomorrow;
+  useEffect(() => {
+    async function loadWhosOut() {
+      try {
+        setLoading(true);
+        // Fetch active requests and employees directory
+        const [requests, employeesRes] = await Promise.all([
+          apiFetch<any[]>('/leave-requests/whos-out').catch(() => []),
+          apiFetch<any>('/employees?limit=100').catch(() => null),
+        ]);
+
+        const allEmps = employeesRes?.data || [];
+        const allRequests = Array.isArray(requests) ? requests : [];
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        // Filter requests active today
+        const activeToday = allRequests.filter((r) => {
+          const isApp = r.currentStatus === 'APPROVED' || r.status === 'APPROVED' || r.currentStatus === 'PENDING' || r.status === 'PENDING';
+          const s = r.startDate ? r.startDate.split('T')[0] : '';
+          const e = r.endDate ? r.endDate.split('T')[0] : '';
+          return isApp && s <= todayStr && e >= todayStr;
+        });
+
+        // Filter requests active tomorrow
+        const activeTomorrow = allRequests.filter((r) => {
+          const isApp = r.currentStatus === 'APPROVED' || r.status === 'APPROVED' || r.currentStatus === 'PENDING' || r.status === 'PENDING';
+          const s = r.startDate ? r.startDate.split('T')[0] : '';
+          const e = r.endDate ? r.endDate.split('T')[0] : '';
+          return isApp && s <= tomorrowStr && e >= tomorrowStr;
+        });
+
+        const mappedToday = activeToday.map((r, idx) => ({
+          id: r.requestId || r.id || idx,
+          name: r.employeeName || 'Employee',
+          department: r.department || 'Engineering',
+          status: 'out-today',
+          leaveType: r.leaveTypeName || 'Annual Leave',
+          dayAmount: r.requestedDuration === 0.5 ? 0.5 : 1,
+        }));
+        setTodayList(mappedToday);
+
+        const mappedTomorrow = activeTomorrow.map((r, idx) => ({
+          id: r.requestId || r.id || idx,
+          name: r.employeeName || 'Employee',
+          department: r.department || 'Engineering',
+          status: 'out-tomorrow',
+          leaveType: r.leaveTypeName || 'Annual Leave',
+          dayAmount: r.requestedDuration === 0.5 ? 0.5 : 1,
+        }));
+        setTomorrowList(mappedTomorrow);
+      } catch (err) {
+        console.error('Error loading Who’s Out data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadWhosOut();
+    const handleRefresh = () => { void loadWhosOut(); };
+    window.addEventListener('leave-request-submitted', handleRefresh);
+    return () => { window.removeEventListener('leave-request-submitted', handleRefresh); };
+  }, []);
+
+  const employees = activeTab === 'today' ? todayList : tomorrowList;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -22,11 +92,12 @@ export default function WhosOut() {
             <Users size={16} className="text-blue-600" />
           </div>
           <h2 className="text-slate-800 font-semibold text-base">Who's Out</h2>
+          {loading && <RefreshCw size={14} className="animate-spin text-blue-600 ml-2" />}
         </div>
 
         <button
           onClick={() => navigate('/full-calendar')}
-          className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
         >
           <Calendar size={13} />
           Full Calendar
@@ -37,13 +108,14 @@ export default function WhosOut() {
       {/* ── Tabs ── */}
       <div className="flex gap-1 px-6 pt-4">
         {(['today', 'tomorrow'] as Tab[]).map((tab) => {
-          const count = tab === 'today' ? employeesToday.length : employeesTomorrow.length;
+          const list = tab === 'today' ? todayList : tomorrowList;
+          const count = list.length;
           const isActive = activeTab === tab;
           return (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'

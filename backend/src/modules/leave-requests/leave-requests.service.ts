@@ -666,6 +666,31 @@ export class LeaveRequestsService {
     return this.rejectStep(requestId, reviewerId, reason);
   }
 
+  async getWhosOut() {
+    const qb = this.requestRepo
+      .createQueryBuilder('lr')
+      .leftJoinAndSelect('lr.employee', 'emp')
+      .leftJoinAndSelect('lr.leaveType', 'leaveType')
+      .where('lr.status IN (:...statuses)', {
+        statuses: [LeaveRequestStatus.APPROVED, LeaveRequestStatus.PENDING],
+      })
+      .orderBy('lr.startDate', 'ASC');
+
+    const requests = await qb.getMany();
+    return requests.map((lr) => ({
+      requestId: lr.id,
+      employeeId: lr.employeeId,
+      employeeName: lr.employee?.fullName,
+      department: lr.employee?.department || 'Engineering',
+      leaveTypeId: lr.leaveTypeId,
+      leaveTypeName: lr.leaveType?.label,
+      startDate: lr.startDate,
+      endDate: lr.endDate,
+      requestedDuration: lr.durationDays,
+      status: lr.status,
+    }));
+  }
+
   private async getOrCreateBalance(
     em: EntityManager,
     employeeId: string,

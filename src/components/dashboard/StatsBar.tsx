@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getMyLeaveBalances } from '../../services/employeesApi';
+import { apiFetch } from '../../services/apiClient';
 
 // Minimalist card config mimicking the upload screenshot
 const cardConfigs = [
@@ -24,31 +25,77 @@ const cardConfigs = [
 export default function StatsBar() {
   const [stats, setStats] = useState([
     { id: 1, label: 'Available Leave', value: '...', icon: <span className="flex">🏖️</span> },
-    { id: 2, label: 'Pending Leave (Days)', value: '...', icon: <span className="flex">⏳</span> },
-    { id: 3, label: 'Approved this Year', value: '...', icon: <span className="flex">✅</span> },
+    { id: 2, label: 'Pending Leave (Days)', value: '0', icon: <span className="flex">⏳</span> },
+    { id: 3, label: 'Approved this Year', value: '0', icon: <span className="flex">✅</span> },
     { id: 4, label: 'Team Out Today', value: '3', icon: <span className="flex">👥</span> },
   ]);
 
   useEffect(() => {
     async function loadStats() {
       try {
-        const conf = await getMyLeaveBalances();
-        if (conf && conf.balances) {
-          const annual = conf.balances.find((b: any) => b.code === 'ANNUAL') || conf.balances[0];
+        const [balancesData, myRequests] = await Promise.all([
+          getMyLeaveBalances().catch(() => null),
+          apiFetch<any[]>('/leave-requests/my-requests').catch(() => []),
+        ]);
+
+        let available = 0;
+        let approved = 0;
+        let pending = 0;
+
+        if (balancesData && balancesData.balances) {
+          const annual = balancesData.balances.find(
+            (b: any) =>
+              b.code === 'ANNUAL' ||
+              (b.name && b.name.toLowerCase().includes('annual')) ||
+              (b.leaveType && b.leaveType.toLowerCase().includes('annual'))
+          ) || balancesData.balances[0];
+
           if (annual) {
-            setStats(prev => [
-              { ...prev[0], value: String(annual.availableBalance ?? 0) },
-              { ...prev[1], value: String(annual.pendingAmount ?? 0) },
-              { ...prev[2], value: String(annual.approvedUsed ?? 0) },
-              prev[3],
-            ]);
+            available = annual.availableBalance ?? 0;
           }
+
+          balancesData.balances.forEach((b: any) => {
+            approved += Number(b.approvedUsed ?? b.usageYtd ?? 0);
+          });
         }
+
+        if (Array.isArray(myRequests)) {
+          myRequests.forEach((req: any) => {
+            if (req.status === 'PENDING') {
+              pending += Number(req.durationDays || 0);
+            }
+          });
+        }
+
+        let teamOutCount = 0;
+        try {
+          const whosOutRequests = await apiFetch<any[]>('/leave-requests/whos-out').catch(() => []);
+          if (Array.isArray(whosOutRequests)) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            teamOutCount = whosOutRequests.filter((r) => {
+              const isApp = r.currentStatus === 'APPROVED' || r.status === 'APPROVED';
+              const s = r.startDate ? r.startDate.split('T')[0] : '';
+              const e = r.endDate ? r.endDate.split('T')[0] : '';
+              return isApp && s <= todayStr && e >= todayStr;
+            }).length;
+          }
+        } catch (_) {}
+
+        setStats([
+          { id: 1, label: 'Available Leave', value: String(available), icon: <span className="flex">🏖️</span> },
+          { id: 2, label: 'Pending Leave (Days)', value: String(pending), icon: <span className="flex">⏳</span> },
+          { id: 3, label: 'Approved this Year', value: String(approved), icon: <span className="flex">✅</span> },
+          { id: 4, label: 'Team Out Today', value: String(teamOutCount), icon: <span className="flex">👥</span> },
+        ]);
       } catch (err) {
         console.error('Error loading stats', err);
       }
     }
-    loadStats();
+
+    void loadStats();
+    const handleRefetch = () => { void loadStats(); };
+    window.addEventListener('leave-request-submitted', handleRefetch);
+    return () => { window.removeEventListener('leave-request-submitted', handleRefetch); };
   }, []);
 
   return (

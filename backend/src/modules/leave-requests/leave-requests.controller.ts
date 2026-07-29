@@ -52,6 +52,12 @@ export class LeaveRequestsController {
     return this.service.findMyRequests(employeeId);
   }
 
+  @Get('whos-out')
+  @ApiOperation({ summary: 'Get active leave requests for Who is Out dashboard section' })
+  getWhosOut() {
+    return this.service.getWhosOut();
+  }
+
   @Get('hr')
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Get all leave requests for HR' })

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Shield, AlertCircle, RefreshCw, History } from 'lucide-react';
-import type { ApprovalConfiguration, ApprovalLevel, ApproverType } from '../types/adminTypes';
+import type { ApprovalConfiguration, ApprovalLevel } from '../types/adminTypes';
 import SearchInput from '../components/ui/SearchInput';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
@@ -13,16 +13,27 @@ import {
 } from '../../services/approvalWorkflowsApi';
 import { getCountries, type CountryItem } from '../../services/countriesApi';
 import { getLeaveTypes, type LeaveTypeItem } from '../../services/leaveTypesApi';
-import { getEmployees, type BackendEmployee } from '../../services/employeesApi';
+
 import { ApiError } from '../../services/apiClient';
 
-const emptyLevel: ApprovalLevel = { type: 'manager', specificEmployeeEmail: '' };
+/** Auto-assign approver types based on number of levels */
+function getLevelsForCount(count: number): ApprovalLevel[] {
+  if (count === 1) return [{ type: 'manager' }];
+  if (count === 2) return [{ type: 'manager' }, { type: 'hr' }];
+  return [{ type: 'manager' }, { type: 'manager_manager' }, { type: 'hr' }];
+}
+
+const LEVEL_LABELS: Record<string, string> = {
+  manager: "Employee's Manager",
+  manager_manager: "Manager's Manager",
+  hr: 'HR Department',
+};
 
 const emptyForm = (): ApprovalConfiguration => ({
   id: '',
   name: '',
   levelsCount: 1,
-  levels: [{ ...emptyLevel }],
+  levels: getLevelsForCount(1),
   description: '',
   countryId: '',
   leaveTypeId: '',
@@ -36,7 +47,7 @@ export default function ApprovalLevels() {
   const [workflows, setWorkflows] = useState<ApprovalConfiguration[]>([]);
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeItem[]>([]);
-  const [employees, setEmployees] = useState<BackendEmployee[]>([]);
+
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,16 +65,14 @@ export default function ApprovalLevels() {
     setLoading(true);
     setApiError(null);
     try {
-      const [wfs, cList, ltList, empList] = await Promise.all([
+      const [wfs, cList, ltList] = await Promise.all([
         getApprovalWorkflows(signal),
         getCountries(signal),
         getLeaveTypes(signal),
-        getEmployees({ limit: 1000 }, signal),
       ]);
       setWorkflows(wfs);
       setCountries(cList || []);
       setLeaveTypes(ltList || []);
-      setEmployees(empList || []);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load approval workflows data';
@@ -104,28 +113,7 @@ export default function ApprovalLevels() {
   }
 
   function handleLevelsCountChange(count: number) {
-    const nextLevels = [...form.levels];
-    if (count > nextLevels.length) {
-      while (nextLevels.length < count) {
-        nextLevels.push({ ...emptyLevel });
-      }
-    } else if (count < nextLevels.length) {
-      nextLevels.splice(count);
-    }
-    setForm((p) => ({ ...p, levelsCount: count, levels: nextLevels }));
-  }
-
-  function handleLevelChange(index: number, field: keyof ApprovalLevel, value: any) {
-    const nextLevels = [...form.levels];
-    nextLevels[index] = { ...nextLevels[index], [field]: value };
-
-    // If specific employee changes, automatically set the specificEmployeeEmail
-    if (field === 'specificEmployeeEmail') {
-      const selected = employees.find((emp) => emp.email === value);
-      nextLevels[index].specificEmployeeEmail = selected ? selected.email : value;
-    }
-
-    setForm((p) => ({ ...p, levels: nextLevels }));
+    setForm((p) => ({ ...p, levelsCount: count, levels: getLevelsForCount(count) }));
   }
 
   function validate(): boolean {
@@ -143,13 +131,7 @@ export default function ApprovalLevels() {
       newErrors.effectiveFrom = 'Effective date is required';
     }
 
-    form.levels.forEach((lvl, idx) => {
-      if (lvl.type === 'specific_employee') {
-        if (!lvl.specificEmployeeEmail?.trim()) {
-          newErrors[`level_${idx}`] = 'Approver is required';
-        }
-      }
-    });
+
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -329,36 +311,19 @@ export default function ApprovalLevels() {
                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Approval Sequence ({config.levelsCount} {config.levelsCount === 1 ? 'level' : 'levels'})
                     </h4>
-                    {config.levels.map((lvl, index) => {
-                      let specificPersonName = '';
-                      if (lvl.type === 'specific_employee') {
-                        const targetEmp = employees.find((emp) => emp.email === lvl.specificEmployeeEmail);
-                        specificPersonName = targetEmp ? targetEmp.fullName : lvl.specificEmployeeEmail || '';
-                      }
-                      return (
-                        <div
-                          key={index}
-                          className="flex items-center gap-3 bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-100/50 dark:border-slate-700"
-                        >
-                          <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-bold text-[10px] flex items-center justify-center">
-                            {index + 1}
-                          </span>
-                          <div className="text-xs">
-                            <p className="font-bold text-slate-700 dark:text-slate-200">
-                              {lvl.type === 'manager' && "Employee's Manager"}
-                              {lvl.type === 'manager_manager' && "Manager's Manager"}
-                              {lvl.type === 'specific_employee' && 'Specific Person'}
-                              {lvl.type === 'hr' && 'HR Department'}
-                            </p>
-                            {lvl.type === 'specific_employee' && (
-                              <p className="text-[10px] text-slate-400 truncate max-w-48">
-                                {specificPersonName} ({lvl.specificEmployeeEmail})
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {config.levels.map((lvl, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-100/50 dark:border-slate-700"
+                      >
+                        <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-bold text-[10px] flex items-center justify-center">
+                          {index + 1}
+                        </span>
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                          {LEVEL_LABELS[lvl.type] || lvl.type}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -535,11 +500,11 @@ export default function ApprovalLevels() {
           </div>
 
           <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-            <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wide">Approvers Sequence</h3>
+            <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wide">Approval Sequence Configuration</h3>
             {form.levels.map((lvl, index) => (
               <div
                 key={index}
-                className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200/50 dark:border-slate-700 space-y-3"
+                className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-200/50 dark:border-slate-700 space-y-2"
               >
                 <div className="flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-black text-[10px] flex items-center justify-center">
@@ -550,45 +515,20 @@ export default function ApprovalLevels() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Approver Type</label>
-                    <select
-                      value={lvl.type}
-                      onChange={(e) => handleLevelChange(index, 'type', e.target.value as ApproverType)}
-                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    >
-                      <option value="manager">Employee's Manager</option>
-                      <option value="manager_manager">Manager's Manager</option>
-                      <option value="specific_employee">Specific Person</option>
-                      <option value="hr">HR Department</option>
-                    </select>
-                  </div>
-
-                  {lvl.type === 'specific_employee' && (
-                    <div>
-                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Select Employee *</label>
-                      <select
-                        value={lvl.specificEmployeeEmail || ''}
-                        onChange={(e) => handleLevelChange(index, 'specificEmployeeEmail', e.target.value)}
-                        className={`w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border ${
-                          errors[`level_${index}`] ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
-                        } rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
-                      >
-                        <option value="">Choose employee...</option>
-                        {employees.map((emp) => (
-                          <option key={emp.id} value={emp.email}>
-                            {emp.fullName} ({emp.email})
-                          </option>
-                        ))}
-                      </select>
-                      {errors[`level_${index}`] && (
-                        <p className="text-red-500 text-[9px] mt-1 flex items-center gap-0.5">
-                          <AlertCircle size={8} /> {errors[`level_${index}`]}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                <div>
+                  <select
+                    value={lvl.type}
+                    onChange={(e) => {
+                      const nextLevels = [...form.levels];
+                      nextLevels[index] = { ...nextLevels[index], type: e.target.value as any };
+                      setForm((p) => ({ ...p, levels: nextLevels }));
+                    }}
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
+                  >
+                    <option value="manager">Employee's Manager (manager)</option>
+                    <option value="manager_manager">Manager's Manager (manager_manager)</option>
+                    <option value="hr">HR Department (hr)</option>
+                  </select>
                 </div>
               </div>
             ))}

@@ -202,8 +202,8 @@ export default function Login({ onLogin }: LoginProps) {
             <div onClick={() => fillCredentials('gabriel@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
               💡 <strong>Employee</strong>: <span className="font-mono text-cyan-400 underline">gabriel@novelus.com</span>
             </div>
-            <div onClick={() => fillCredentials('maram@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
-              💼 <strong>Manager</strong>: <span className="font-mono text-cyan-400 underline">maram@novelus.com</span>
+            <div onClick={() => fillCredentials('maram@volus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
+              💼 <strong>Manager</strong>: <span className="font-mono text-cyan-400 underline">maram@volus.com</span>
             </div>
             <div onClick={() => fillCredentials('admin@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
               🛡️ <strong>HR Admin</strong>: <span className="font-mono text-cyan-400 underline">admin@novelus.com</span>

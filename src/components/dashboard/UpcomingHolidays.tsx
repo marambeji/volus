@@ -1,5 +1,8 @@
+import { useState, useEffect } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { upcomingHolidays } from '../../data/mockData';
+import { getHolidays } from '../../services/holidaysApi';
+import { getCountries } from '../../services/countriesApi';
 
 // How many days until a given ISO date string
 function daysUntil(dateStr: string): number {
@@ -21,8 +24,32 @@ function formatDate(dateStr: string): string {
 }
 
 export default function UpcomingHolidays() {
+  const [holidaysList, setHolidaysList] = useState<any[]>(upcomingHolidays);
+
+  useEffect(() => {
+    async function loadRealHolidays() {
+      try {
+        const countries = await getCountries().catch(() => []);
+        const realHolidays = await getHolidays(undefined, '2026', countries || []).catch(() => []);
+        if (Array.isArray(realHolidays) && realHolidays.length > 0) {
+          const mapped = realHolidays.map((h: any) => ({
+            id: h.id,
+            name: h.name,
+            date: h.date,
+            country: h.countryName || 'Global',
+            flag: h.flag || '🏳️',
+          }));
+          setHolidaysList(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to fetch real holidays:', err);
+      }
+    }
+    void loadRealHolidays();
+  }, []);
+
   // Sort by date ascending
-  const sorted = [...upcomingHolidays].sort(
+  const sorted = [...holidaysList].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
