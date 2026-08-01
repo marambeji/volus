@@ -49,6 +49,33 @@ export class LeaveRequestsService {
     }
 
     return this.dataSource.transaction(async (em) => {
+      // 0. Check for overlapping requests for the same employee
+      const conflictingRequest = await em
+        .createQueryBuilder(LeaveRequest, 'lr')
+        .where('lr.employeeId = :employeeId', { employeeId })
+        .andWhere('lr.status IN (:...activeStatuses)', {
+          activeStatuses: [LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED],
+        })
+        .andWhere('lr.startDate <= :newEndDate AND lr.endDate >= :newStartDate', {
+          newStartDate: dto.startDate,
+          newEndDate: dto.endDate,
+        })
+        .setLock('pessimistic_write')
+        .getOne();
+
+      if (conflictingRequest) {
+        throw new ConflictException({
+          code: 'LEAVE_REQUEST_DATE_OVERLAP',
+          message: 'You already have a leave request for one or more selected days.',
+          conflictingRequest: {
+            id: conflictingRequest.id,
+            fromDate: conflictingRequest.startDate,
+            toDate: conflictingRequest.endDate,
+            status: conflictingRequest.status,
+          },
+        });
+      }
+
       // 1. Resolve Employee & Manager Context
       const employee = await em.findOne(Employee, {
         where: { id: employeeId },

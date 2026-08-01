@@ -5,6 +5,7 @@ import {
   IsInt,
   IsISO8601,
   IsOptional,
+  IsString,
   IsUUID,
   Max,
   Min,
@@ -13,6 +14,11 @@ import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 import { LedgerTransactionType } from '../../../common/enums';
 
 export class LedgerQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Search by employee full name (case-insensitive)' })
+  @IsString()
+  @IsOptional()
+  search?: string;
+
   @ApiPropertyOptional()
   @IsUUID()
   @IsOptional()

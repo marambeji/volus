@@ -49,6 +49,12 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
     };
 
     mockEm = {
+      createQueryBuilder: jest.fn().mockImplementation(() => ({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockImplementation(() => Promise.resolve((service as any)._mockConflictingRequest || null)),
+      })),
       findOne: jest.fn().mockImplementation((entity, options) => {
         if (entity === LeaveRequest || entity.name === 'LeaveRequest') {
           return Promise.resolve(mockLeaveRequest);
@@ -59,6 +65,7 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
         }
         return Promise.resolve(null);
       }),
+      create: jest.fn().mockImplementation((entity, dto) => ({ id: 'new-req-uuid', ...dto })),
       save: jest.fn().mockImplementation((item) => Promise.resolve(item)),
     };
 
@@ -260,5 +267,171 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
 
   it('6. Employee ownership check: Unowned request approval progress throws 404 Not Found', async () => {
     await expect(service.getApprovalProgress(mockRequestId, 'other-emp-id')).rejects.toThrow(NotFoundException);
+  });
+
+  describe('7. Overlapping & Duplicate Leave Request Validation', () => {
+    it('exact same dates: should throw ConflictException with LEAVE_REQUEST_DATE_OVERLAP payload', async () => {
+      (service as any)._mockConflictingRequest = {
+        id: 'req-overlap-1',
+        startDate: '2026-08-10',
+        endDate: '2026-08-12',
+        status: LeaveRequestStatus.APPROVED,
+      };
+
+      try {
+        await (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-10',
+          endDate: '2026-08-12',
+          durationDays: 3,
+        });
+        fail('Should have thrown ConflictException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ConflictException);
+        const res = err.getResponse();
+        expect(res.code).toBe('LEAVE_REQUEST_DATE_OVERLAP');
+        expect(res.message).toBe('You already have a leave request for one or more selected days.');
+        expect(res.conflictingRequest).toEqual({
+          id: 'req-overlap-1',
+          fromDate: '2026-08-10',
+          toDate: '2026-08-12',
+          status: LeaveRequestStatus.APPROVED,
+        });
+      }
+    });
+
+    it('one-day overlap: 10-12 Aug existing vs 12-15 Aug new should be blocked', async () => {
+      (service as any)._mockConflictingRequest = {
+        id: 'req-overlap-2',
+        startDate: '2026-08-10',
+        endDate: '2026-08-12',
+        status: LeaveRequestStatus.PENDING,
+      };
+
+      try {
+        await (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-12',
+          endDate: '2026-08-15',
+          durationDays: 4,
+        });
+        fail('Should have thrown ConflictException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ConflictException);
+        expect(err.getResponse().code).toBe('LEAVE_REQUEST_DATE_OVERLAP');
+      }
+    });
+
+    it('full overlap: 10-15 Aug existing vs 11-12 Aug new should be blocked', async () => {
+      (service as any)._mockConflictingRequest = {
+        id: 'req-overlap-3',
+        startDate: '2026-08-10',
+        endDate: '2026-08-15',
+        status: LeaveRequestStatus.APPROVED,
+      };
+
+      try {
+        await (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-11',
+          endDate: '2026-08-12',
+          durationDays: 2,
+        });
+        fail('Should have thrown ConflictException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ConflictException);
+        expect(err.getResponse().code).toBe('LEAVE_REQUEST_DATE_OVERLAP');
+      }
+    });
+
+    it('partial overlap: 10-12 Aug existing vs 11-14 Aug new should be blocked', async () => {
+      (service as any)._mockConflictingRequest = {
+        id: 'req-overlap-4',
+        startDate: '2026-08-10',
+        endDate: '2026-08-12',
+        status: LeaveRequestStatus.APPROVED,
+      };
+
+      try {
+        await (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-11',
+          endDate: '2026-08-14',
+          durationDays: 4,
+        });
+        fail('Should have thrown ConflictException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ConflictException);
+        expect(err.getResponse().code).toBe('LEAVE_REQUEST_DATE_OVERLAP');
+      }
+    });
+
+    it('approved request blocks new request', async () => {
+      (service as any)._mockConflictingRequest = {
+        id: 'req-approved',
+        startDate: '2026-08-10',
+        endDate: '2026-08-12',
+        status: LeaveRequestStatus.APPROVED,
+      };
+
+      await expect(
+        (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-10',
+          endDate: '2026-08-12',
+          durationDays: 3,
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('pending request blocks new request', async () => {
+      (service as any)._mockConflictingRequest = {
+        id: 'req-pending',
+        startDate: '2026-08-10',
+        endDate: '2026-08-12',
+        status: LeaveRequestStatus.PENDING,
+      };
+
+      await expect(
+        (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-10',
+          endDate: '2026-08-12',
+          durationDays: 3,
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('rejected request does not block new request', async () => {
+      (service as any)._mockConflictingRequest = null; // QueryBuilder filters out REJECTED status
+
+      // Should proceed past overlap check without throwing ConflictException
+      // Note: may fail further down if workflow is missing in mock, but should not throw ConflictException
+      try {
+        await (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-10',
+          endDate: '2026-08-12',
+          durationDays: 3,
+        });
+      } catch (err: any) {
+        expect(err).not.toBeInstanceOf(ConflictException);
+      }
+    });
+
+    it('cancelled request does not block new request', async () => {
+      (service as any)._mockConflictingRequest = null; // QueryBuilder filters out CANCELLED status
+
+      try {
+        await (service as any).create(mockEmpId, {
+          leaveTypeId: 'lt-uuid-8888',
+          startDate: '2026-08-10',
+          endDate: '2026-08-12',
+          durationDays: 3,
+        });
+      } catch (err: any) {
+        expect(err).not.toBeInstanceOf(ConflictException);
+      }
+    });
   });
 });

@@ -6,6 +6,7 @@ import { Employee } from '../employees/entities/employee.entity';
 import { LeaveType } from '../leave-types/entities/leave-type.entity';
 import { LeaveBalancesService } from './leave-balances.service';
 import { LeaveBalancesController } from './leave-balances.controller';
+import { LeaveLedgerController } from './leave-ledger.controller';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { LeaveBalancesController } from './leave-balances.controller';
       LeaveType,
     ]),
   ],
-  controllers: [LeaveBalancesController],
+  controllers: [LeaveBalancesController, LeaveLedgerController],
   providers: [LeaveBalancesService],
   exports: [LeaveBalancesService, TypeOrmModule],
 })

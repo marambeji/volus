@@ -99,3 +99,55 @@ export async function getLedgerEntries(
   const res = await apiFetch<PaginatedResponse<BackendLedgerEntry>>(url, { signal });
   return res.data;
 }
+
+// ── Accrual History DTO ─────────────────────────────────────────────────────
+
+export interface AccrualHistoryRow {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeAvatar: string | null;
+  jobTitle: string | null;
+  departmentName: string | null;
+  email: string | null;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  transactionType: string;
+  description: string;
+  signedAmount: number;
+  usedDays: number;
+  earnedDays: number;
+  balanceAfter: number;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface LedgerHistoryQuery {
+  search?: string;
+  employeeId?: string;
+  leaveTypeId?: string;
+  transactionType?: string;
+  year?: number;
+  page?: number;
+  limit?: number;
+}
+
+export async function getLedgerHistory(
+  query?: LedgerHistoryQuery,
+  signal?: AbortSignal
+): Promise<PaginatedResponse<AccrualHistoryRow>> {
+  const params = new URLSearchParams();
+  if (query?.search) params.set('search', query.search);
+  if (query?.employeeId) params.set('employeeId', query.employeeId);
+  if (query?.leaveTypeId) params.set('leaveTypeId', query.leaveTypeId);
+  if (query?.transactionType) params.set('transactionType', query.transactionType);
+  if (query?.year) params.set('year', String(query.year));
+  params.set('page', String(query?.page ?? 1));
+  params.set('limit', String(query?.limit ?? 20));
+
+  return apiFetch<PaginatedResponse<AccrualHistoryRow>>(
+    `/leave-ledger/history?${params.toString()}`,
+    { signal }
+  );
+}
+

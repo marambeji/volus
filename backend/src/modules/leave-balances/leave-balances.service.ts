@@ -52,7 +52,11 @@ export class LeaveBalancesService {
 
     const employee = await this.employeeRepo.findOne({
       where: { id: employeeId, deletedAt: IsNull() },
-      relations: { policyAssignments: { leavePolicy: { rules: { leaveType: true } } } },  });
+      relations: {
+        country: true,
+        policyAssignments: { leavePolicy: { rules: { leaveType: true } } },
+      },
+    });
 
     if (!employee) throw new NotFoundException('Employee not found');
     if (employee.status !== EmployeeStatus.ACTIVE) {
@@ -177,6 +181,7 @@ export class LeaveBalancesService {
     return {
       employeeId: employee.id,
       employeeName: employee.fullName,
+      countryId: employee.countryId,
       countryCode: employee.country?.code,
       policyId: policy.id,
       policyName: policy.policyName,
@@ -253,14 +258,13 @@ export class LeaveBalancesService {
     const {
       page = 1,
       limit = 20,
+      search,
       employeeId,
       leaveTypeId,
       transactionType,
       year,
       dateFrom,
       dateTo,
-      sortBy = 'transactionDate',
-      sortOrder = 'DESC',
     } = query;
 
     if (dateFrom && dateTo && new Date(dateFrom) > new Date(dateTo)) {
@@ -277,6 +281,11 @@ export class LeaveBalancesService {
       .leftJoinAndSelect('l.leaveType', 'leaveType')
       .leftJoinAndSelect('l.performedByEmployee', 'performer');
 
+    if (search) {
+      qb.andWhere('LOWER(employee.full_name) LIKE LOWER(:search)', {
+        search: `%${search}%`,
+      });
+    }
     if (employeeId) qb.andWhere('l.employeeId = :employeeId', { employeeId });
     if (leaveTypeId)
       qb.andWhere('l.leaveTypeId = :leaveTypeId', { leaveTypeId });
@@ -287,10 +296,43 @@ export class LeaveBalancesService {
     if (dateFrom) qb.andWhere('l.transactionDate >= :dateFrom', { dateFrom });
     if (dateTo) qb.andWhere('l.transactionDate <= :dateTo', { dateTo });
 
-    qb.orderBy(`l.${sortBy}`, sortOrder).skip(skip).take(limit);
+    qb.orderBy('l.transactionDate', 'DESC').skip(skip).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
-    return paginate(data, total, page, limit);
+
+    // Shape into clean DTO for Accrual History frontend
+    const rows = data.map((l) => {
+      const emp = l.employee;
+      const lt = l.leaveType;
+      const performer = l.performedByEmployee;
+
+      // USAGE entries → usedDays (absolute value); others → earnedDays
+      const isUsage = l.transactionType === 'USAGE';
+      const usedDays = isUsage ? Math.abs(Number(l.signedAmount)) : 0;
+      const earnedDays = !isUsage && Number(l.signedAmount) > 0 ? Number(l.signedAmount) : 0;
+
+      return {
+        id: l.id,
+        employeeId: l.employeeId,
+        employeeName: emp?.fullName ?? 'Unknown Employee',
+        employeeAvatar: emp?.avatar ?? null,
+        jobTitle: emp?.jobTitle ?? null,
+        departmentName: emp?.department ?? null,
+        email: emp?.email ?? null,
+        leaveTypeId: l.leaveTypeId,
+        leaveTypeName: lt?.label ?? lt?.key ?? 'Unknown',
+        transactionType: l.transactionType,
+        description: l.reason,
+        signedAmount: Number(l.signedAmount),
+        usedDays,
+        earnedDays,
+        balanceAfter: Number(l.resultingBalance),
+        createdAt: l.transactionDate,
+        createdBy: performer?.fullName ?? 'SYSTEM',
+      };
+    });
+
+    return paginate(rows, total, page, limit);
   }
 
   // ── Adjust Balance (Atomic with Pessimistic Locking) ──────────────────────
