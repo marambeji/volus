@@ -5,6 +5,7 @@ import { LeaveLedgerEntry } from './entities/leave-ledger-entry.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { LeaveType } from '../leave-types/entities/leave-type.entity';
 import { LeaveBalancesService } from './leave-balances.service';
+import { AccrualSchedulerService } from './accrual-scheduler.service';
 import { LeaveBalancesController } from './leave-balances.controller';
 import { LeaveLedgerController } from './leave-ledger.controller';
 
@@ -18,7 +19,7 @@ import { LeaveLedgerController } from './leave-ledger.controller';
     ]),
   ],
   controllers: [LeaveBalancesController, LeaveLedgerController],
-  providers: [LeaveBalancesService],
+  providers: [LeaveBalancesService, AccrualSchedulerService],
   exports: [LeaveBalancesService, TypeOrmModule],
 })
 export class LeaveBalancesModule {}

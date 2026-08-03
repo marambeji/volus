@@ -193,12 +193,16 @@ export default function LeavePolicies() {
   }
 
   function populatePolicyData(policy: CountryPolicy) {
-    setPolicyName(policy.policyName);
-    setCountryCode(policy.countryCode);
-    setCountryName(policy.country);
-    setFlag(policy.flag);
-    setWorkingHoursPerDay(policy.workingHoursPerDay);
-    setApprovalWorkflow(policy.approvalWorkflow);
+    setPolicyName(policy.policyName || '');
+    setCountryCode(policy.countryCode || countries[0]?.code || 'LB');
+    setCountryName(policy.country || countries[0]?.name || 'Lebanon');
+    setFlag(policy.flag || countries[0]?.flag || '🇱🇧');
+    setWorkingHoursPerDay(policy.workingHoursPerDay || 8);
+
+    const matchedWf = workflows.find(
+      (w) => w.id === policy.approvalWorkflow || w.name === policy.approvalWorkflow
+    );
+    setApprovalWorkflow(matchedWf?.id || workflows[0]?.id || policy.approvalWorkflow || '');
     setDivisionAssignment(policy.divisionAssignment || '');
     setWeekendDays(policy.weekendDays || [0, 6]);
 
@@ -225,13 +229,12 @@ export default function LeavePolicies() {
     setFormOpen(true);
   }
 
-  function handleCountrySelect(cCode: string) {
-    const found = countries.find((c) => c.code === cCode);
-    if (found) {
-      setCountryCode(found.code);
-      setCountryName(found.name);
-      setFlag(found.flag);
-    }
+  function handleCountrySelect(code: string) {
+    const found = countries.find((c) => c.code === code);
+    if (!found) return;
+    setCountryCode(found.code);
+    setCountryName(found.name);
+    setFlag(found.flag);
   }
 
   function handleWeekendToggle(dayIndex: number) {
@@ -265,21 +268,10 @@ export default function LeavePolicies() {
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
-    if (!policyName.trim()) newErrors.policyName = 'Policy Name is required';
-    if (!countryCode.trim()) newErrors.countryCode = 'Country selection is required';
-    if (!approvalWorkflow.trim()) newErrors.approvalWorkflow = 'Approval Workflow selection is required';
-
-    Object.values(quotasByTypeId).forEach((q) => {
-      if (q.isAccrued && (q.accrualRate ?? 0) <= 0) {
-        newErrors[`quota_${q.leaveType}_rate`] = `Accrual rate for ${q.leaveType} must be positive`;
-      }
-      if (q.carryOverEnabled && (q.maxCarryOver ?? 0) < 0) {
-        newErrors[`quota_${q.leaveType}_carry`] = `Max carry over for ${q.leaveType} cannot be negative`;
-      }
-      if (q.isCutOffDifferentFromHireDate && !q.cutOffDate?.trim()) {
-        newErrors[`quota_${q.leaveType}_cutoff`] = `Cut-off date for ${q.leaveType} is required`;
-      }
-    });
+    if (!policyName.trim()) {
+      newErrors.policyName = 'Policy Name is required';
+      newErrors.form = 'Policy Name is required.';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -292,16 +284,20 @@ export default function LeavePolicies() {
 
     setSaving(true);
     const finalQuotas = Object.values(quotasByTypeId);
+    const validWfId = approvalWorkflow || workflows[0]?.id || '';
+    const validCountryCode = countryCode || countries[0]?.code || 'LB';
+    const validCountryName = countryName || countries[0]?.name || 'Lebanon';
+
     const payload: Partial<CountryPolicy> = {
       id: editPol?.id,
-      policyName: policyName.trim(),
-      countryCode,
-      country: countryName,
-      flag,
-      workingHoursPerDay,
-      approvalWorkflow,
+      policyName: policyName.trim() || 'Custom Policy',
+      countryCode: validCountryCode,
+      country: validCountryName,
+      flag: flag || '🇱🇧',
+      workingHoursPerDay: workingHoursPerDay || 8,
+      approvalWorkflow: validWfId,
       divisionAssignment,
-      weekendDays,
+      weekendDays: weekendDays || [0, 6],
       leaveQuotas: finalQuotas,
     };
 
@@ -920,7 +916,11 @@ export default function LeavePolicies() {
                             step="0.01"
                             min="0"
                             value={currentQuota.accrualRate || 0}
-                            onChange={(e) => handleCurrentQuotaChange('accrualRate', Math.max(0, Number(e.target.value)))}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(',', '.');
+                              const num = parseFloat(val);
+                              handleCurrentQuotaChange('accrualRate', isNaN(num) ? 0 : Math.max(0, num));
+                            }}
                             className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                           />
                         </div>
@@ -945,7 +945,11 @@ export default function LeavePolicies() {
                             step="0.01"
                             min="0"
                             value={currentQuota.seniorityMilestones?.[0]?.accruedDays || 0}
-                            onChange={(e) => handleMilestoneChange('accruedDays', Math.max(0, Number(e.target.value)))}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(',', '.');
+                              const num = parseFloat(val);
+                              handleMilestoneChange('accruedDays', isNaN(num) ? 0 : Math.max(0, num));
+                            }}
                             className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                           />
                         </div>

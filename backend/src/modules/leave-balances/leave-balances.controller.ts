@@ -6,17 +6,28 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LeaveBalancesService } from './leave-balances.service';
 import { AdjustBalanceDto } from './dto/adjust-balance.dto';
 import { BalanceQueryDto } from './dto/balance-query.dto';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
+import { AdminGuard } from '../../common/guards/admin.guard';
 
 @ApiTags('Leave Balances')
 @Controller({ path: 'leave-balances', version: '1' })
 export class LeaveBalancesController {
   constructor(private readonly service: LeaveBalancesService) {}
+
+  @Post('run-accruals')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'Manually trigger monthly/yearly leave accruals for all active employees',
+  })
+  runAccruals(@Body() body?: { month?: number; year?: number }) {
+    return this.service.runAccruals(body?.month, body?.year);
+  }
 
   @Get('ledger')
   @ApiOperation({

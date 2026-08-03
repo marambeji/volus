@@ -146,7 +146,11 @@ export function frontendQuotaToRuleDto(q: LeaveQuota): BackendLeaveRuleDto {
       ? BackendAccrualInterval.YEARLY
       : BackendAccrualInterval.MONTHLY
     : null;
-  const accrualRate = isAccrued ? (q.accrualRate && q.accrualRate > 0 ? Number(q.accrualRate) : 1) : null;
+
+  const rawRate = typeof q.accrualRate === 'string'
+    ? parseFloat(String(q.accrualRate).replace(',', '.'))
+    : Number(q.accrualRate);
+  const accrualRate = isAccrued ? (!isNaN(rawRate) && rawRate > 0 ? rawRate : 0) : null;
 
   const isCustomCutOff = Boolean(q.isCutOffDifferentFromHireDate && q.cutOffDate);
   let cutOffMonth: number | null = null;
@@ -168,13 +172,20 @@ export function frontendQuotaToRuleDto(q: LeaveQuota): BackendLeaveRuleDto {
   const carryOverExpirationEnabled = Boolean(carryOverEnabled && q.carryOverExpiration);
   const carryOverExpirationDays = carryOverExpirationEnabled ? 90 : null;
 
-  const milestones: BackendMilestoneDto[] = (q.seniorityMilestones || []).map((m) => ({
-    serviceYearsFrom: Number(m.years || 0),
-    serviceYearsTo: null,
-    accrualRate: Number(m.accruedDays || 0) > 0 ? Number(m.accruedDays) : 1,
-    entitlementDays: Number(m.accruedDays || 0),
-    cap: null,
-  }));
+  const milestones: BackendMilestoneDto[] = (q.seniorityMilestones || [])
+    .filter((m) => Number(m.accruedDays || 0) > 0)
+    .map((m) => {
+      const rawMsRate = typeof m.accruedDays === 'string'
+        ? parseFloat(String(m.accruedDays).replace(',', '.'))
+        : Number(m.accruedDays || 0);
+      return {
+        serviceYearsFrom: Number(m.years || 0),
+        serviceYearsTo: null,
+        accrualRate: rawMsRate,
+        entitlementDays: rawMsRate,
+        cap: null,
+      };
+    });
 
   const maxConsecutiveVal = q.maxConsecutiveDays !== undefined && q.maxConsecutiveDays !== null
     ? Number(q.maxConsecutiveDays)

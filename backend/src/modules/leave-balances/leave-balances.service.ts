@@ -258,7 +258,7 @@ export class LeaveBalancesService {
     const {
       page = 1,
       limit = 20,
-      search,
+      q: search,
       employeeId,
       leaveTypeId,
       transactionType,
@@ -421,10 +421,13 @@ export class LeaveBalancesService {
           balance!.usedYtd = newBalance;
         } else {
           // AVAILABLE_BALANCE
+          // Only block DEDUCTIONS (negative amounts) that would push balance below zero.
+          // ADDITIONS (positive amounts) are always allowed — even if balance is already negative,
+          // because the HR admin is intentionally correcting/restoring the balance.
           newBalance = Number(balance!.availableBalance) + amount;
-          if (newBalance < 0) {
+          if (amount < 0 && newBalance < 0) {
             throw new BadRequestException(
-              'AVAILABLE_BALANCE cannot be negative.',
+              'Cannot deduct: resulting balance would be negative.',
             );
           }
           balance!.availableBalance = newBalance;
@@ -469,4 +472,223 @@ export class LeaveBalancesService {
       throw err;
     }
   }
+
+  // ── Monthly/Yearly Accrual Engine ──────────────────────────────────────────
+
+  /**
+   * Compute accrual rate for a rule for a given employee, respecting Seniority Milestones.
+   * Milestones are sorted by serviceYearsFrom ascending; the highest matching bracket wins.
+   */
+  private resolveAccrualRate(rule: any, serviceYears: number): number {
+    const milestones: any[] = (rule.milestones || []).sort(
+      (a: any, b: any) => a.serviceYearsFrom - b.serviceYearsFrom,
+    );
+
+    let resolved = rule.accrualRate ?? 0;
+    for (const m of milestones) {
+      const from = Number(m.serviceYearsFrom);
+      const to = m.serviceYearsTo !== null ? Number(m.serviceYearsTo) : Infinity;
+      if (serviceYears >= from && serviceYears < to) {
+        resolved = Number(m.accrualRate);
+        break;
+      }
+    }
+    return resolved;
+  }
+
+  /**
+   * Run accruals for all active employees whose policy has isAccrued rules.
+   * Supports MONTHLY and YEARLY intervals.
+   * Uses idempotency keys to ensure each period is only processed once per employee/leaveType.
+   *
+   * @param month  1-12 (default: current month)
+   * @param year   (default: current year)
+   */
+  async runAccruals(month?: number, year?: number): Promise<{
+    processedEmployees: number;
+    accrualEntriesCreated: number;
+    skipped: number;
+    errors: { employeeId: string; leaveTypeId: string; error: string }[];
+  }> {
+    const now = new Date();
+    const targetMonth = month ?? now.getMonth() + 1; // 1-12
+    const targetYear = year ?? now.getFullYear();
+    const periodStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+    const todayStr = now.toISOString().split('T')[0];
+
+    let processedEmployees = 0;
+    let accrualEntriesCreated = 0;
+    let skipped = 0;
+    const errors: { employeeId: string; leaveTypeId: string; error: string }[] = [];
+
+    // 1. Load all active employees with their policy assignments and rules (including milestones)
+    const employees = await this.employeeRepo.find({
+      where: { status: EmployeeStatus.ACTIVE, deletedAt: IsNull() },
+      relations: {
+        policyAssignments: {
+          leavePolicy: {
+            rules: { leaveType: true, milestones: true },
+          },
+        },
+      },
+    });
+
+    for (const employee of employees) {
+      // 2. Find their active policy assignment for today
+      const activeAssignments = (employee.policyAssignments || []).filter(
+        (a) =>
+          a.isActive &&
+          a.effectiveFrom <= todayStr &&
+          (!a.effectiveTo || a.effectiveTo >= todayStr),
+      );
+
+      if (activeAssignments.length !== 1) continue; // skip if no policy or ambiguous
+
+      const policy = activeAssignments[0].leavePolicy;
+      if (!policy || policy.status !== LeavePolicyStatus.ACTIVE) continue;
+
+      processedEmployees++;
+
+      // 3. Compute employee seniority in years
+      const hireDate = new Date(employee.hireDate);
+      const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
+      const serviceYears = (now.getTime() - hireDate.getTime()) / msPerYear;
+
+      for (const rule of policy.rules || []) {
+        if (!rule.isAccrued || !rule.accrualRate || !rule.accrualInterval) continue;
+        if (!rule.leaveType || !rule.leaveType.isActive) continue;
+
+        // 4. Check if this rule's interval applies to the current period
+        const isMonthlyCycle = rule.accrualInterval === 'MONTHLY';
+        const isYearlyCycle = rule.accrualInterval === 'YEARLY';
+
+        // For YEARLY: only process in January (month 1)
+        if (isYearlyCycle && targetMonth !== 1) {
+          skipped++;
+          continue;
+        }
+        // For MONTHLY: always process
+        if (!isMonthlyCycle && !isYearlyCycle) {
+          skipped++;
+          continue;
+        }
+
+        const idempotencyKey = `ACCRUAL:${employee.id}:${rule.leaveTypeId}:${periodStr}`;
+
+        try {
+          await this.dataSource.transaction(async (em) => {
+            // 5. Idempotency check — skip if already processed this period
+            const existing = await em.findOne(LeaveLedgerEntry, {
+              where: { idempotencyKey },
+            });
+            if (existing) {
+              skipped++;
+              return;
+            }
+
+            // 6. Resolve accrual rate via seniority milestones
+            const accrualRate = this.resolveAccrualRate(rule, serviceYears);
+            if (accrualRate <= 0) {
+              skipped++;
+              return;
+            }
+
+            // 7. Find or create LeaveBalance for this employee/leaveType/year
+            let balance = await em.findOne(LeaveBalance, {
+              where: {
+                employeeId: employee.id,
+                leaveTypeId: rule.leaveTypeId,
+                year: targetYear,
+              },
+              lock: { mode: 'pessimistic_write' },
+            });
+
+            if (!balance) {
+              try {
+                const newBal = em.create(LeaveBalance, {
+                  employeeId: employee.id,
+                  leaveTypeId: rule.leaveTypeId,
+                  year: targetYear,
+                  availableBalance: 0,
+                  usedYtd: 0,
+                  pending: 0,
+                  carriedOver: 0,
+                });
+                await em.save(newBal);
+              } catch (concurrentErr: unknown) {
+                if ((concurrentErr as { code?: string })?.code !== '23505') throw concurrentErr;
+              }
+              balance = await em.findOne(LeaveBalance, {
+                where: {
+                  employeeId: employee.id,
+                  leaveTypeId: rule.leaveTypeId,
+                  year: targetYear,
+                },
+                lock: { mode: 'pessimistic_write' },
+              });
+            }
+
+            if (!balance) throw new Error('Could not find or create leave balance');
+
+            // 8. Apply balance cap if configured
+            let finalAccrualAmount = accrualRate;
+            if (rule.maxBalanceCap !== null && rule.maxBalanceCap !== undefined) {
+              const currentBalance = Number(balance.availableBalance);
+              const cap = Number(rule.maxBalanceCap);
+              if (currentBalance >= cap) {
+                skipped++;
+                return; // Already at cap — skip accrual
+              }
+              // Clamp to avoid exceeding cap
+              finalAccrualAmount = Math.min(accrualRate, cap - currentBalance);
+            }
+
+            const newBalance = Number(balance.availableBalance) + finalAccrualAmount;
+            balance.availableBalance = newBalance;
+            const savedBalance = await em.save(balance);
+
+            // 9. Write the ACCRUAL ledger entry
+            const monthName = new Date(targetYear, targetMonth - 1).toLocaleString('en-US', { month: 'long' });
+            const intervalLabel = isMonthlyCycle ? 'Monthly' : 'Annual';
+            const entry = em.create(LeaveLedgerEntry, {
+              balanceId: savedBalance.id,
+              employeeId: employee.id,
+              leaveTypeId: rule.leaveTypeId,
+              transactionType: LedgerTransactionType.ACCRUAL,
+              signedAmount: finalAccrualAmount,
+              resultingBalance: newBalance,
+              reason: `${intervalLabel} accrual — ${monthName} ${targetYear}`,
+              referenceType: 'ACCRUAL_JOB',
+              idempotencyKey,
+              performedByEmployeeId: null,
+            });
+            await em.save(entry);
+            accrualEntriesCreated++;
+          });
+        } catch (err: unknown) {
+          errors.push({
+            employeeId: employee.id,
+            leaveTypeId: rule.leaveTypeId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    }
+
+    return { processedEmployees, accrualEntriesCreated, skipped, errors };
+  }
+
+  /**
+   * Cron job: run monthly accruals automatically on the 1st of each month at 06:00 AM.
+   * MONTHLY rules are processed every month.
+   * YEARLY rules are processed only in January.
+   */
+  async handleMonthlyAccrualCron() {
+    const now = new Date();
+    console.log(`[AccrualCron] Starting accrual job for ${now.toISOString()}`);
+    const result = await this.runAccruals(now.getMonth() + 1, now.getFullYear());
+    console.log(`[AccrualCron] Completed: ${JSON.stringify(result)}`);
+    return result;
+  }
 }
+
