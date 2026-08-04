@@ -609,12 +609,9 @@ export class LeaveRequestsService {
       });
 
       if (!request) throw new NotFoundException('Leave request not found');
-      if (
-        request.status === LeaveRequestStatus.CANCELLED ||
-        request.status === LeaveRequestStatus.REJECTED
-      ) {
+      if (request.status !== LeaveRequestStatus.PENDING) {
         throw new ConflictException(
-          'This leave request cannot be cancelled in its current status.',
+          'Only pending leave requests can be cancelled. Approved requests cannot be cancelled by the employee.',
         );
       }
 
@@ -625,8 +622,6 @@ export class LeaveRequestsService {
           'This leave request cannot be cancelled because its dates have already passed.',
         );
       }
-
-      const wasApproved = request.status === LeaveRequestStatus.APPROVED;
 
       // Skip all remaining steps
       const steps = request.approvalInstances || [];
@@ -669,16 +664,6 @@ export class LeaveRequestsService {
         { newValues: logRequest || request },
         em,
       );
-
-      if (wasApproved) {
-        // Reverse usage in ledger exactly once
-        await this.applyLedger(
-          em,
-          request,
-          LedgerTransactionType.REVERSAL,
-          employeeId,
-        );
-      }
 
       return saved;
     });

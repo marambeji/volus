@@ -171,7 +171,7 @@ export class LeaveRequestsController {
   }
 
   @Patch(':id/cancel')
-  @ApiOperation({ summary: 'Cancel a pending or approved leave request' })
+  @ApiOperation({ summary: 'Cancel a pending leave request' })
   cancel(
     @Headers('x-employee-id') employeeId: string,
     @Param('id') id: string,

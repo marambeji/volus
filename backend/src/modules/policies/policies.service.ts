@@ -403,25 +403,43 @@ export class PoliciesService {
       }
 
       if (dto.leaveQuotas) {
-        // Delete existing rules (cascade deletes milestones)
+        // Update existing rules in place (matched by leave type) instead of
+        // delete+recreate — a rule that already has calculated leave_balances
+        // referencing it (onDelete: RESTRICT) cannot be deleted, so editing a
+        // quota on a policy that's actually in use (any employee balance
+        // calculated under it) would otherwise fail with a FK conflict.
         const existingRules = await em.find(LeaveRule, {
           where: { policyId: id },
         });
-        if (existingRules.length) await em.delete(LeaveRule, { policyId: id });
+        const existingByType = new Map(
+          existingRules.map((r) => [r.leaveTypeId, r]),
+        );
+        const dtoLeaveTypeIds = new Set<string>();
 
         for (const ruleDto of dto.leaveQuotas) {
           const leaveType = await this.resolveLeaveType(ruleDto.leaveTypeId || ruleDto.leaveType);
-          const rule = em.create(LeaveRule, {
-            policyId: id,
-            leaveTypeId: leaveType.id,
-            ...this.normalizeRule(ruleDto),
-          });
-          const savedRule = await em.save(rule);
+          dtoLeaveTypeIds.add(leaveType.id);
+          const existing = existingByType.get(leaveType.id);
+
+          let ruleId: string;
+          if (existing) {
+            await em.update(LeaveRule, existing.id, this.normalizeRule(ruleDto));
+            ruleId = existing.id;
+            // Milestones have no downstream references — safe to replace.
+            await em.delete(SeniorityMilestone, { leaveRuleId: ruleId });
+          } else {
+            const rule = em.create(LeaveRule, {
+              policyId: id,
+              leaveTypeId: leaveType.id,
+              ...this.normalizeRule(ruleDto),
+            });
+            ruleId = (await em.save(rule)).id;
+          }
 
           if (ruleDto.milestones?.length) {
             const milestones = ruleDto.milestones.map((m) =>
               em.create(SeniorityMilestone, {
-                leaveRuleId: savedRule.id,
+                leaveRuleId: ruleId,
                 serviceYearsFrom: m.serviceYearsFrom,
                 serviceYearsTo: m.serviceYearsTo ?? null,
                 accrualRate: m.accrualRate,
@@ -432,6 +450,12 @@ export class PoliciesService {
             await em.save(milestones);
           }
         }
+
+        // Remove rules for leave types no longer present in the submitted quotas
+        const toRemove = existingRules
+          .filter((r) => !dtoLeaveTypeIds.has(r.leaveTypeId))
+          .map((r) => r.id);
+        if (toRemove.length) await em.delete(LeaveRule, toRemove);
       }
 
       // Use the transaction's em to load relations (avoids READ COMMITTED isolation issue)

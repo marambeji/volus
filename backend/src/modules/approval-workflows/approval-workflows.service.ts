@@ -212,10 +212,20 @@ export class ApprovalWorkflowsService {
       });
 
       if (dto.steps) {
-        await em.delete(ApprovalWorkflowStep, { workflowId: id });
-        const steps = dto.steps.map((s) =>
-          em.create(ApprovalWorkflowStep, {
-            workflowId: id,
+        // Update existing step rows in place (matched by position) instead of
+        // delete+recreate — a step that's already been referenced by a
+        // historical approval_instances.step_id FK cannot be deleted, so a
+        // blanket delete here would break editing any workflow that has ever
+        // actually been used.
+        const existingSteps = await em.find(ApprovalWorkflowStep, {
+          where: { workflowId: id },
+          order: { stepOrder: 'ASC' },
+        });
+        const keepCount = Math.min(existingSteps.length, dto.steps.length);
+
+        for (let i = 0; i < keepCount; i++) {
+          const s = dto.steps[i];
+          await em.update(ApprovalWorkflowStep, existingSteps[i].id, {
             stepOrder: s.stepOrder,
             approverType: s.approverType,
             departmentId: s.departmentId ?? null,
@@ -223,9 +233,29 @@ export class ApprovalWorkflowsService {
             specificApproverId: s.specificApproverId ?? s.specificApproverEmployeeId ?? null,
             specificApproverEmail: s.specificApproverEmail ?? null,
             isRequired: s.isRequired ?? true,
-          }),
-        );
-        await em.save(steps);
+          });
+        }
+
+        if (existingSteps.length > dto.steps.length) {
+          const toRemove = existingSteps.slice(dto.steps.length).map((s) => s.id);
+          await em.delete(ApprovalWorkflowStep, toRemove);
+        }
+
+        if (dto.steps.length > existingSteps.length) {
+          const newSteps = dto.steps.slice(existingSteps.length).map((s) =>
+            em.create(ApprovalWorkflowStep, {
+              workflowId: id,
+              stepOrder: s.stepOrder,
+              approverType: s.approverType,
+              departmentId: s.departmentId ?? null,
+              specificApproverEmployeeId: s.specificApproverEmployeeId ?? s.specificApproverId ?? null,
+              specificApproverId: s.specificApproverId ?? s.specificApproverEmployeeId ?? null,
+              specificApproverEmail: s.specificApproverEmail ?? null,
+              isRequired: s.isRequired ?? true,
+            }),
+          );
+          await em.save(newSteps);
+        }
       }
 
       const resolved = (await em.findOne(ApprovalWorkflow, {

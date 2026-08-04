@@ -54,11 +54,12 @@ describe('MyInfo — leave request cancellation', () => {
     expect(screen.getByTitle('Cancel request')).toBeInTheDocument();
   });
 
-  it('shows the Cancel action for an APPROVED request', async () => {
+  it('hides the Cancel action for an APPROVED request', async () => {
     mockApi([{ ...baseRequest, status: 'APPROVED' }]);
     await renderMyInfo();
 
-    expect(screen.getByTitle('Cancel request')).toBeInTheDocument();
+    expect(screen.getByText('Approved')).toBeInTheDocument();
+    expect(screen.queryByTitle('Cancel request')).not.toBeInTheDocument();
   });
 
   it('hides the Cancel action for a REJECTED request', async () => {

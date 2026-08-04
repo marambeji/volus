@@ -90,7 +90,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
           setConfig(finalConfig);
 
           if (combinedBalances.length > 0) {
-            const defaultType = combinedBalances.find((t: any) => t.code === 'ANNUAL') || combinedBalances[0];
+            const defaultType = combinedBalances.find((t: any) => t.code?.toUpperCase() === 'ANNUAL') || combinedBalances[0];
             setTypeId(defaultType.leaveTypeId);
           }
         } catch (error: any) {
@@ -158,7 +158,10 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
     setDailyAmounts(tempDaily);
   }, [startDate, endDate]);
 
-  const isPublicHolidayType = selectedLeaveConfig?.code === 'PUBLIC_HOLIDAY';
+  // Real balances return a lowercase code (e.g. "public_holiday"); only the
+  // synthetic fallback entry above (for a leave type with no balance yet)
+  // uppercases it — compare case-insensitively so this works for both.
+  const isPublicHolidayType = selectedLeaveConfig?.code?.toUpperCase() === 'PUBLIC_HOLIDAY';
   const totalDays = isPublicHolidayType
     ? selectedHolidayIds.length
     : Object.values(dailyAmounts).reduce((sum, val) => sum + val, 0);

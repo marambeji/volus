@@ -90,3 +90,47 @@ All 7 new `MyInfo.test.tsx` tests pass.
 - **Balance History ledger→leave-type-code mapping** resolves codes client-side from the employee's *current active* balances list. If a ledger entry references a leave type no longer in the employee's active policy, it falls back to displaying the raw UUID instead of a label. Pre-existing risk in how this data is shaped, newly exposed now that the tab is live instead of static mock data.
 - **319 backend lint errors and 14 frontend build/typecheck errors are pre-existing** and were not introduced or fixed by this task — flagged above with exact locations; fixing them is a separate, much larger cleanup effort outside this feature's scope.
 - **`leave-balances.service.spec.ts`'s 1 pre-existing failing test** (message text mismatch) was not touched, per the same reasoning.
+
+---
+
+# Admin Balance Management — Transaction Ledger Fix (2026-08-04)
+
+Fixes the HR Admin "Leave Balances" page (`/admin/balances`) showing `Invalid Date`, `—` (Leave Type / Reason), and `NaN` (Balance After) in the Transaction Ledger table, for every row.
+
+## Root cause
+
+`GET /leave-balances/ledger` (`LeaveBalancesService.findAllLedger`) was, at some earlier point, reshaped to return the same "clean DTO" as the dedicated Accrual History endpoint (`GET /leave-ledger/history`) — the service comment literally reads *"Shape into clean DTO for Accrual History frontend"*. Its rows now use `createdAt` / `leaveTypeName` / `description` / `balanceAfter`, not the raw `LeaveLedgerEntry` entity fields (`transactionDate` / `leaveType.label` / `reason` / `resultingBalance`) that `BalanceManagement.tsx` and its `getLedgerEntries()` wrapper were still typed and coded against. The `Change` and `Type` columns happened to keep working because `signedAmount` and `transactionType` are named identically in both shapes — only `Date`, `Leave Type`, `Reason`, and `Balance After` broke, matching exactly what was reported.
+
+Confirmed via direct backend calls (`curl .../leave-balances/ledger` vs `curl .../leave-ledger/history`) that both endpoints now return the identical row shape — so the fix is on the frontend contract, not the backend (which several other, working pages already depend on in its current shape).
+
+A second, independent bug was found and fixed in the same file while verifying in the browser: `BalanceManagement.tsx` auto-selects `state.employees[0]` as soon as the list is non-empty, but `AdminContext`'s `state.employees` is seeded synchronously with legacy mock data (numeric ids like `1`) before the real backend employee list (UUID ids) loads asynchronously. On every fresh page load this fired `GET /leave-balances/employee/1` and `GET /leave-balances/ledger?employeeId=1`, both returning `400 Bad Request — uuid is expected`.
+
+## Files modified
+
+- `src/services/balancesApi.ts` — `getLedgerEntries()` return type changed from the stale `BackendLedgerEntry[]` to `AccrualHistoryRow[]` (already defined in the same file for the Accrual History page), matching what `GET /leave-balances/ledger` actually returns. Added a comment on the function documenting the real field names, since the old field names look plausible but are wrong. `BackendLedgerEntry` itself is left in place — it's still the correct shape for `adjustBalance()`'s response (`POST /leave-balances/adjust` returns the raw saved entity, not the DTO).
+- `src/admin/pages/BalanceManagement.tsx`:
+  - Removed the stale local `LedgerEntry` interface; `ledgerData` is now typed `AccrualHistoryRow[]`.
+  - Ledger table now renders `l.createdAt` (Date), `l.leaveTypeName` (Leave Type), `l.description` (Reason), `l.balanceAfter` (Balance After).
+  - The Leave Type filter dropdown matched against `l.leaveType?.key`, a field that doesn't exist on the real response (always `undefined`, so the filter silently matched nothing once a specific type was picked). Now resolves the selected leave type's `leaveTypeId` from the already-loaded balances list and filters `l.leaveTypeId` against it.
+  - Fixed the mock-data auto-select race: only auto-selects `state.employees[0]` once its `id` is a string (real backend UUID), not the numeric mock seed.
+  - Added a `leave-request-submitted` window-event listener (the same refresh signal already used by `WhosOut`, `StatsBar`, `WelcomeBanner`, etc.) so this page's balances and ledger refetch automatically when a leave request is submitted/cancelled/approved/rejected anywhere else in the app, not just when this page's own "Adjust Balance" action runs.
+  - `handleAdjust` now also dispatches `leave-request-submitted` after a successful adjustment, so other open widgets pick up the balance change too.
+- `src/admin/pages/LeaveRequests.tsx` — `handleApprove`/`handleReject` (HR override approve/reject, which create `USAGE` ledger entries) now dispatch `leave-request-submitted` on success. Previously this admin action didn't notify anything, so Balance Management (or any other page relying on that signal) never learned a balance-affecting change had happened elsewhere.
+
+No backend files changed — the API contract itself is correct and shared correctly with the Accrual History page; only the stale frontend consumer needed updating.
+
+## Validation results (real, captured during this session)
+
+- **Root cause confirmed via direct API calls**: `curl http://localhost:3000/api/v1/leave-balances/ledger?employeeId=<uuid>&year=2026` against the real dev Postgres data returned `createdAt`/`leaveTypeName`/`description`/`balanceAfter` fields, not the old raw shape — verified before writing any fix.
+- **Verified live in the browser (Playwright) against real Postgres data**, HR Admin session, `/admin/balances`:
+  - Selected "Salim Hizi" (4 `INITIAL_GRANT` rows) — Date, Type, Leave Type, Reason, Change, Balance After all correct (e.g. `22/07/2026 · initial grant · Sick Leave · Initial frontloaded policy grant · +10 · 10`).
+  - Selected "salim 11" (mixed `REVERSAL`/`USAGE` rows, including negative/overdrafted balances) — all columns correct, including negative Balance After values rendering as real numbers, not `NaN` (e.g. `04/08/2026 · reversal · Annual Leave · Cancellation of Annual Leave from 20/12/2026 to 22/12/2026 · +3 · -68`).
+  - Leave Type filter dropdown set to "Sick Leave" correctly narrowed the table to only that employee's Sick Leave row.
+  - Confirmed the auto-select bug: before the fix, a fresh page load logged two `400 Bad Request` console errors (`.../leave-balances/employee/1`, `.../leave-balances/ledger?...employeeId=1`) before any employee was manually clicked. After the fix, a fresh page load produces zero console errors.
+- **`npx tsc -b`**: 14 errors, identical count and file list to the pre-existing baseline (`AdminSidebar.tsx`, `BalanceManagement.tsx`'s 3 pre-existing unused-var errors — `dispatch`, `accrualRunning`, `setAccrualRunning`, none touched by this fix — `AdminContext.tsx`, `RequestModal.tsx`, `WhosOut.tsx`, `Layout.tsx`, `ApprovalProgressTimeline.tsx`, `ApprovalDashboard.tsx`, `FullCalendar.tsx`). No new type errors introduced.
+- **`npm run lint`** (oxlint) — exit code 0. All output is pre-existing warnings (unused imports/vars, `react-hooks/exhaustive-deps`) across files this task didn't touch, plus the 3 pre-existing warnings already in `BalanceManagement.tsx` (`dispatch`, `accrualRunning`, `setAccrualRunning`) and the pre-existing empty-destructure warning in `LeaveRequests.tsx` (`const {} = useAdmin();`, line 23, not introduced by this change). No new warnings from the edited lines.
+
+## Not done / out of scope this round
+
+- `BalanceManagement.tsx`'s 3 pre-existing unused-variable errors (`dispatch`, `accrualRunning`, `setAccrualRunning`) were left as-is — they predate this fix and are unrelated to the ledger contract bug.
+- The employee-side (non-HR-override) `approve`/`reject` step actions (`PUT /leave-requests/:id/approve|reject`, used by managers/HR in the normal per-step workflow, as opposed to the HR-override `PUT /leave-requests/hr/:id/approve|reject` used on the admin Leave Requests page) do not dispatch `leave-request-submitted`. Only the HR-override path was in scope here since that's the action reachable from the admin side that most directly affects the page just fixed; wiring every approval entry point is a larger, separate change.

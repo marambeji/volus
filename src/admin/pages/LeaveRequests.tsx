@@ -103,6 +103,7 @@ export default function LeaveRequests() {
       await hrApproveLeaveRequest(id);
       setToast('Leave request fully approved');
       loadRequests();
+      window.dispatchEvent(new Event('leave-request-submitted'));
     } catch (e: any) {
       setToast(e.message || 'Failed to approve');
     }
@@ -115,6 +116,7 @@ export default function LeaveRequests() {
       setToast('Leave request declined');
       setRejectId(null);
       loadRequests();
+      window.dispatchEvent(new Event('leave-request-submitted'));
     } catch (e: any) {
       setToast(e.message || 'Failed to reject');
     }

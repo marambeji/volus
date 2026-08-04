@@ -402,7 +402,7 @@ export default function MyInfo() {
                             >
                               <Eye size={14} />
                             </button>
-                            {(req.status === 'pending' || req.status === 'approved') && !hasPassed(req.endDate) && (
+                            {req.status === 'pending' && !hasPassed(req.endDate) && (
                               <button
                                 onClick={() => setCancelTarget(req)}
                                 disabled={cancellingId === req.id}
@@ -512,11 +512,7 @@ export default function MyInfo() {
         onClose={() => setCancelTarget(null)}
         onConfirm={handleConfirmCancel}
         title="Cancel Leave Request"
-        message={
-          cancelTarget?.status === 'approved'
-            ? 'Are you sure you want to cancel this leave request? The deducted leave days will be restored to your balance.'
-            : 'Are you sure you want to cancel this leave request?'
-        }
+        message="Are you sure you want to cancel this leave request?"
         confirmLabel="Cancel Request"
         danger
         confirming={!!cancelTarget && cancellingId === cancelTarget.id}

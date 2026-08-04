@@ -6,7 +6,7 @@ import SearchInput from '../components/ui/SearchInput';
 import StatCard from '../components/ui/StatCard';
 import HistoryDrawer from '../components/HistoryDrawer';
 import SlideDrawer from '../components/ui/SlideDrawer';
-import { adjustBalance, getLedgerEntries } from '../../services/balancesApi';
+import { adjustBalance, getLedgerEntries, type AccrualHistoryRow } from '../../services/balancesApi';
 import { apiFetch } from '../../services/apiClient';
 
 interface BalanceItem {
@@ -28,17 +28,6 @@ interface CalculatedResponse {
   balances: BalanceItem[];
 }
 
-interface LedgerEntry {
-  id: string;
-  leaveTypeId: string;
-  leaveType?: { key: string; label: string };
-  transactionType: string;
-  transactionDate: string;
-  signedAmount: number;
-  resultingBalance: number;
-  reason: string;
-}
-
 export default function BalanceManagement() {
   const { state, dispatch } = useAdmin();
   const [search, setSearch] = useState('');
@@ -47,7 +36,7 @@ export default function BalanceManagement() {
   const [filterType, setFilterType] = useState<LeaveTypeKey | 'all'>('all');
 
   const [balanceData, setBalanceData] = useState<CalculatedResponse | null>(null);
-  const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
+  const [ledgerData, setLedgerData] = useState<AccrualHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
@@ -64,9 +53,12 @@ export default function BalanceManagement() {
     e.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Auto-select first employee once backend employees are loaded
+  // Auto-select first employee once backend employees are loaded.
+  // state.employees starts out seeded with mock data (numeric ids) until the
+  // real employee list (UUID ids) arrives — skip the mock seed so we don't
+  // fire balance/ledger requests for a non-existent numeric id.
   useEffect(() => {
-    if (!selectedEmpId && state.employees.length > 0) {
+    if (!selectedEmpId && state.employees.length > 0 && typeof state.employees[0].id === 'string') {
       const first = state.employees[0];
       setSelectedEmpId(String(first.id));
     }
@@ -113,6 +105,14 @@ export default function BalanceManagement() {
     void fetchLedger();
   }, [fetchBalances, fetchLedger]);
 
+  // Balances/ledger change whenever a leave request is submitted, cancelled,
+  // approved or rejected anywhere in the app — refetch on that shared signal.
+  useEffect(() => {
+    const handleRefresh = () => { void fetchBalances(); void fetchLedger(); };
+    window.addEventListener('leave-request-submitted', handleRefresh);
+    return () => { window.removeEventListener('leave-request-submitted', handleRefresh); };
+  }, [fetchBalances, fetchLedger]);
+
   // Derive UI-level summary metrics from calculated balances
   const allBalances: BalanceItem[] = balanceData?.balances ?? [];
 
@@ -127,11 +127,11 @@ export default function BalanceManagement() {
   const remainingBal = selectedTypeBalance?.remaining   ?? selectedTypeBalance?.available ?? 0;
 
   // Filter ledger for display
+  const selectedLeaveTypeId = filterType === 'all'
+    ? null
+    : allBalances.find(b => b.code === filterType)?.leaveTypeId;
   const displayedLedger = ledgerData.filter(l => {
-    const matchType = filterType === 'all'
-      ? true
-      : (l.leaveType?.key === filterType);
-    return matchType;
+    return selectedLeaveTypeId ? l.leaveTypeId === selectedLeaveTypeId : true;
   });
 
   async function handleAdjust(e: React.FormEvent) {
@@ -166,6 +166,7 @@ export default function BalanceManagement() {
       setAdjustReason('');
       await fetchBalances();
       await fetchLedger();
+      window.dispatchEvent(new Event('leave-request-submitted'));
       setTimeout(() => setToast(null), 3500);
     } catch (err: any) {
       console.error('[handleAdjust] Error:', err);
@@ -382,22 +383,22 @@ export default function BalanceManagement() {
                         displayedLedger.map(l => (
                           <tr key={l.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30">
                             <td className="py-3 px-3 text-xs text-slate-500">
-                              {new Date(l.transactionDate).toLocaleDateString('en-GB')}
+                              {new Date(l.createdAt).toLocaleDateString('en-GB')}
                             </td>
                             <td className="py-3 px-3 text-xs font-semibold capitalize text-slate-600 dark:text-slate-300">
                               {l.transactionType.replace(/_/g, ' ').toLowerCase()}
                             </td>
                             <td className="py-3 px-3 text-xs text-slate-500">
-                              {l.leaveType?.label ?? '—'}
+                              {l.leaveTypeName ?? '—'}
                             </td>
-                            <td className="py-3 px-3 text-xs text-slate-500">{l.reason || '—'}</td>
+                            <td className="py-3 px-3 text-xs text-slate-500">{l.description || '—'}</td>
                             <td className={`py-3 px-3 text-xs font-bold text-right ${
                               Number(l.signedAmount) > 0 ? 'text-emerald-500' : Number(l.signedAmount) < 0 ? 'text-red-500' : 'text-slate-500'
                             }`}>
                               {Number(l.signedAmount) > 0 ? '+' : ''}{Number(l.signedAmount)}
                             </td>
                             <td className="py-3 px-3 text-xs font-bold text-slate-700 dark:text-slate-200 text-right">
-                              {Number(l.resultingBalance)}
+                              {Number(l.balanceAfter)}
                             </td>
                           </tr>
                         ))

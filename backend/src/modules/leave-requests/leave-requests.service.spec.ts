@@ -503,7 +503,7 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
       expect((service as any).applyLedger).not.toHaveBeenCalled();
     });
 
-    it('owner can cancel an APPROVED request and it restores the balance via exactly one REVERSAL', async () => {
+    it('an employee cannot cancel a request that is already APPROVED', async () => {
       mockLeaveRequest.status = LeaveRequestStatus.APPROVED;
       mockLeaveRequest.approvalInstances = [
         {
@@ -513,32 +513,27 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
         },
       ];
 
-      const result = await service.cancel(mockEmpId, mockRequestId);
-
-      expect(result.status).toBe(LeaveRequestStatus.CANCELLED);
-      expect((service as any).applyLedger).toHaveBeenCalledTimes(1);
-      expect((service as any).applyLedger).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          id: mockRequestId,
-          leaveTypeId: mockLeaveRequest.leaveTypeId,
-        }),
-        LedgerTransactionType.REVERSAL,
-        mockEmpId,
+      await expect(service.cancel(mockEmpId, mockRequestId)).rejects.toThrow(
+        ConflictException,
       );
+      expect((service as any).applyLedger).not.toHaveBeenCalled();
     });
 
-    it('a repeated cancellation cannot refund the balance twice', async () => {
+    it('an employee cannot cancel a request auto-approved by the system', async () => {
       mockLeaveRequest.status = LeaveRequestStatus.APPROVED;
-      mockLeaveRequest.approvalInstances = [];
-
-      await service.cancel(mockEmpId, mockRequestId);
-      expect((service as any).applyLedger).toHaveBeenCalledTimes(1);
+      mockLeaveRequest.approvalInstances = [
+        {
+          id: 'step-1',
+          status: ApprovalInstanceStatus.APPROVED,
+          decisionNote: 'System Auto-Approved (Expired after 5 days)',
+          actionDate: new Date(),
+        },
+      ];
 
       await expect(service.cancel(mockEmpId, mockRequestId)).rejects.toThrow(
         ConflictException,
       );
-      expect((service as any).applyLedger).toHaveBeenCalledTimes(1); // still only once
+      expect((service as any).applyLedger).not.toHaveBeenCalled();
     });
 
     it("an employee cannot cancel another employee's request", async () => {

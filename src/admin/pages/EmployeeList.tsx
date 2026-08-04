@@ -10,6 +10,7 @@ import ConfirmModal from '../components/ui/ConfirmModal';
 import HistoryDrawer from '../components/HistoryDrawer';
 import { createEmployee, updateEmployee, deleteEmployee } from '../../services/employeesApi';
 import { toAdminEmployee, toBackendEmployeePayload } from '../../services/mappers/employeeMapper';
+import { CANONICAL_DEPARTMENT_NAMES } from '../data/adminMockData';
 
 const emptyForm = (): Omit<AdminEmployee, 'id'> => ({
   name: '',
@@ -59,7 +60,12 @@ export default function EmployeeList() {
     }
   }, [toast]);
 
+  // Filter bar: only departments that actually have employees, so filtering by
+  // an empty department isn't offered. Add/Edit form: full canonical list (see
+  // departmentOptions below) so a department can be picked before anyone's
+  // assigned to it yet.
   const departments = [...new Set(state.employees.map(e => e.department))];
+  const departmentOptions = Array.from(new Set([...CANONICAL_DEPARTMENT_NAMES, ...departments])).sort();
   const countries = ['Lebanon', 'United Arab Emirates', 'Saudi Arabia', 'United Kingdom', 'France', 'Tunisia', 'Canada'];
 
   const filtered = state.employees.filter(e => {
@@ -358,7 +364,7 @@ export default function EmployeeList() {
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department</label>
               <select value={form.department} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
-                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
 

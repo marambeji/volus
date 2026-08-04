@@ -77,6 +77,10 @@ export async function adjustBalance(payload: {
   });
 }
 
+// GET /leave-balances/ledger shapes rows into the same clean DTO as
+// /leave-ledger/history (see AccrualHistoryRow below) — it does not return
+// the raw LeaveLedgerEntry fields (no `transactionDate`/`leaveType`/`reason`/
+// `resultingBalance`; use `createdAt`/`leaveTypeName`/`description`/`balanceAfter`).
 export async function getLedgerEntries(
   query?: {
     employeeId?: string;
@@ -88,7 +92,7 @@ export async function getLedgerEntries(
     limit?: number;
   },
   signal?: AbortSignal
-): Promise<BackendLedgerEntry[]> {
+): Promise<AccrualHistoryRow[]> {
   let url = '/leave-balances/ledger?limit=' + (query?.limit ?? 500);
   if (query?.employeeId) url += '&employeeId=' + encodeURIComponent(query.employeeId);
   if (query?.leaveTypeId) url += '&leaveTypeId=' + encodeURIComponent(query.leaveTypeId);
@@ -96,7 +100,7 @@ export async function getLedgerEntries(
   if (query?.year) url += '&year=' + query.year;
   if (query?.dateFrom) url += '&dateFrom=' + encodeURIComponent(query.dateFrom);
   if (query?.dateTo) url += '&dateTo=' + encodeURIComponent(query.dateTo);
-  const res = await apiFetch<PaginatedResponse<BackendLedgerEntry>>(url, { signal });
+  const res = await apiFetch<PaginatedResponse<AccrualHistoryRow>>(url, { signal });
   return res.data;
 }
 

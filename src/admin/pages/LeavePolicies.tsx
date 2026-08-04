@@ -12,7 +12,9 @@ import { getDivisions } from '../../services/divisionsApi';
 import type { DivisionItem } from '../../services/divisionsApi';
 import { getLeaveTypes } from '../../services/leaveTypesApi';
 import type { LeaveTypeItem } from '../../services/leaveTypesApi';
-import { getApprovalWorkflows } from '../../services/approvalWorkflowsApi';
+import { getApprovalWorkflows, updateApprovalWorkflow } from '../../services/approvalWorkflowsApi';
+import { getEmployees } from '../../services/employeesApi';
+import type { BackendEmployee } from '../../services/employeesApi';
 import {
   getPolicies,
   createPolicy,
@@ -21,8 +23,33 @@ import {
 } from '../../services/policiesApi';
 import { ApiError } from '../../services/apiClient';
 import type { ApprovalConfiguration } from '../types/adminTypes';
+import { CANONICAL_DEPARTMENT_NAMES } from '../data/adminMockData';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// A workflow with exactly one step is a plain approver-type shortcut (Manager,
+// HR, Specific Person, ...) rather than a genuine multi-step chain — display
+// the approver type instead of trusting whatever name it was saved under
+// (some single-step "Specific Person" workflows were seeded with junk names).
+const APPROVER_TYPE_LABELS: Record<string, string> = {
+  manager: "Employee's Manager",
+  manager_manager: "Manager's Manager",
+  specific_employee: 'Specific Person',
+  hr: 'HR Department',
+};
+
+function isSpecificPersonWorkflow(w: ApprovalConfiguration): boolean {
+  const type = w.levels[0]?.type as string;
+  return w.levels.length === 1 && (type === 'specific_employee' || type === 'SPECIFIC_PERSON');
+}
+
+function workflowDisplayLabel(w: ApprovalConfiguration): string {
+  if (w.levels.length === 1) {
+    const label = APPROVER_TYPE_LABELS[w.levels[0].type];
+    if (label) return label;
+  }
+  return w.name;
+}
 
 const defaultQuotaForType = (typeKey: string, typeId?: string): LeaveQuota => {
   const keyLower = typeKey.toLowerCase();
@@ -63,6 +90,7 @@ export default function LeavePolicies() {
   const [divisions, setDivisions] = useState<DivisionItem[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeItem[]>([]);
   const [workflows, setWorkflows] = useState<ApprovalConfiguration[]>([]);
+  const [employees, setEmployees] = useState<BackendEmployee[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -84,6 +112,10 @@ export default function LeavePolicies() {
   const [divisionAssignment, setDivisionAssignment] = useState('');
   const [weekendDays, setWeekendDays] = useState<number[]>([0, 6]);
 
+  // Only relevant when the selected Approval Workflow is a single-step "Specific Person" shortcut
+  const [specificDeptId, setSpecificDeptId] = useState('');
+  const [specificPersonId, setSpecificPersonId] = useState('');
+
   // Quota Form State per LeaveType (indexed by stable leaveTypeId or key)
   const [quotasByTypeId, setQuotasByTypeId] = useState<Record<string, LeaveQuota>>({});
   const [selectedLeaveTypeId, setSelectedLeaveTypeId] = useState<string>('');
@@ -96,12 +128,13 @@ export default function LeavePolicies() {
     setLoading(true);
     setApiError(null);
     try {
-      const [cRes, dRes, ltRes, wfRes, pRes] = await Promise.all([
+      const [cRes, dRes, ltRes, wfRes, pRes, empRes] = await Promise.all([
         getCountries(signal),
         getDivisions(signal),
         getLeaveTypes(signal),
         getApprovalWorkflows(signal),
         getPolicies(signal),
+        getEmployees({ limit: 1000 }, signal),
       ]);
 
       setCountries(cRes);
@@ -109,6 +142,7 @@ export default function LeavePolicies() {
       setLeaveTypes(ltRes);
       setWorkflows(wfRes);
       setPolicies(pRes);
+      setEmployees(empRes || []);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load policy configuration data';
@@ -124,10 +158,41 @@ export default function LeavePolicies() {
     return () => controller.abort();
   }, []);
 
+  function handleWorkflowChange(id: string) {
+    setApprovalWorkflow(id);
+    const wf = workflows.find((w) => w.id === id);
+    if (wf && isSpecificPersonWorkflow(wf)) {
+      const lvl = wf.levels[0];
+      setSpecificDeptId(lvl.departmentId || '');
+      setSpecificPersonId(lvl.specificApproverEmployeeId || '');
+    } else {
+      setSpecificDeptId('');
+      setSpecificPersonId('');
+    }
+  }
+
   const filtered = policies.filter(
     (p) =>
       p.policyName.toLowerCase().includes(search.toLowerCase()) ||
       p.country.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selectedWorkflow = workflows.find((w) => w.id === approvalWorkflow);
+  const showSpecificPersonFields = !!selectedWorkflow && isSpecificPersonWorkflow(selectedWorkflow);
+
+  // Departments aren't a separate backend entity. Offer the full canonical
+  // list (so a department can be picked even before anyone's assigned to it
+  // yet) plus any other department name actually in use on real employee
+  // records, deduped — using the real "Human Resources" string throughout,
+  // not a guessed "HR" that would silently match zero employees.
+  const departmentOptions = Array.from(
+    new Set([
+      ...CANONICAL_DEPARTMENT_NAMES,
+      ...employees.map((e) => e.department).filter((d): d is string => !!d),
+    ])
+  ).sort();
+  const specificDeptActiveEmployees = employees.filter(
+    (e) => e.department === specificDeptId && (e.status === 'ACTIVE' || (e.status as string) === 'active')
   );
 
   const activeLeaveTypes = leaveTypes.filter(
@@ -175,7 +240,7 @@ export default function LeavePolicies() {
     setCountryName(firstC?.name || 'Lebanon');
     setFlag(firstC?.flag || '🇱🇧');
     setWorkingHoursPerDay(8);
-    setApprovalWorkflow(firstWf?.id || '');
+    handleWorkflowChange(firstWf?.id || '');
     setDivisionAssignment('');
     setWeekendDays([0, 6]);
 
@@ -202,7 +267,7 @@ export default function LeavePolicies() {
     const matchedWf = workflows.find(
       (w) => w.id === policy.approvalWorkflow || w.name === policy.approvalWorkflow
     );
-    setApprovalWorkflow(matchedWf?.id || workflows[0]?.id || policy.approvalWorkflow || '');
+    handleWorkflowChange(matchedWf?.id || workflows[0]?.id || policy.approvalWorkflow || '');
     setDivisionAssignment(policy.divisionAssignment || '');
     setWeekendDays(policy.weekendDays || [0, 6]);
 
@@ -273,6 +338,11 @@ export default function LeavePolicies() {
       newErrors.form = 'Policy Name is required.';
     }
 
+    if (showSpecificPersonFields) {
+      if (!specificDeptId) newErrors.specificDept = 'Department is required for Specific Person approver';
+      if (!specificPersonId) newErrors.specificPerson = 'Person is required for Specific Person approver';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -302,6 +372,19 @@ export default function LeavePolicies() {
     };
 
     try {
+      if (showSpecificPersonFields && selectedWorkflow) {
+        const chosenEmp = specificDeptActiveEmployees.find((e) => e.id === specificPersonId);
+        await updateApprovalWorkflow(selectedWorkflow.id, {
+          ...selectedWorkflow,
+          levels: [{
+            type: 'specific_employee',
+            departmentId: specificDeptId,
+            specificApproverEmployeeId: specificPersonId,
+            specificEmployeeEmail: chosenEmp?.email || '',
+          }],
+        });
+      }
+
       if (editPol && editPol.id) {
         await updatePolicy(editPol.id, payload);
       } else {
@@ -676,12 +759,12 @@ export default function LeavePolicies() {
                     </label>
                     <select
                       value={approvalWorkflow}
-                      onChange={(e) => setApprovalWorkflow(e.target.value)}
+                      onChange={(e) => handleWorkflowChange(e.target.value)}
                       className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                     >
                       {workflows.map((w) => (
                         <option key={w.id} value={w.id}>
-                          {w.name}
+                          {workflowDisplayLabel(w)}
                         </option>
                       ))}
                     </select>
@@ -705,6 +788,72 @@ export default function LeavePolicies() {
                     </select>
                   </div>
                 </div>
+
+                {showSpecificPersonFields && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Department *
+                      </label>
+                      <select
+                        value={specificDeptId}
+                        onChange={(e) => {
+                          setSpecificDeptId(e.target.value);
+                          setSpecificPersonId('');
+                        }}
+                        className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
+                          errors.specificDept ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
+                        } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                      >
+                        <option value="">Select department...</option>
+                        {departmentOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.specificDept && (
+                        <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1">
+                          <AlertCircle size={10} /> {errors.specificDept}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Person *
+                      </label>
+                      <select
+                        value={specificPersonId}
+                        disabled={!specificDeptId}
+                        onChange={(e) => setSpecificPersonId(e.target.value)}
+                        className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
+                          errors.specificPerson ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
+                        } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {!specificDeptId ? (
+                          <option value="">Select a department first...</option>
+                        ) : specificDeptActiveEmployees.length === 0 ? (
+                          <option value="">No active employees found in this department</option>
+                        ) : (
+                          <>
+                            <option value="">Choose person...</option>
+                            {specificDeptActiveEmployees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.fullName} — {emp.jobTitle}
+                              </option>
+                            ))}
+                          </>
+                        )}
+                      </select>
+                      {errors.specificPerson && (
+                        <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1">
+                          <AlertCircle size={10} /> {errors.specificPerson}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">

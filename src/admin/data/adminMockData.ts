@@ -129,6 +129,15 @@ export const adminDepartments: Department[] = [
   { id: 9, name: 'Executive',   headId: 10, color: '#F97316', teams: [{ id: 9, name: 'HQ',           managerId: 10, memberIds: [10] }] },
 ];
 
+// Canonical company department names for "pick a department" dropdowns
+// (Add Employee, Approval Workflow's Specific Person picker, ...). Kept in
+// sync with adminDepartments above, but "HR" is normalized to "Human
+// Resources" to match the actual Employee.department string used by real
+// backend/seeded data — using "HR" here would silently match zero employees.
+export const CANONICAL_DEPARTMENT_NAMES = adminDepartments.map((d) =>
+  d.name === 'HR' ? 'Human Resources' : d.name
+);
+
 // ─── Leave Balances (all employees, all types) ────────────────────────────────
 import type { LeaveTypeKey } from '../../types';
 const leaveTypes: LeaveTypeKey[] = ['annual','sick','bereavement','wedding','paternity','maternity','public_holiday','compensation','unpaid','overtime'];
