@@ -14,7 +14,14 @@ import {
   LeaveRequestStatus,
   LedgerTransactionType,
 } from '../../common/enums';
-import { ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { LeaveBalance } from '../leave-balances/entities/leave-balance.entity';
+import { LeaveType } from '../leave-types/entities/leave-type.entity';
+import { LeaveLedgerEntry } from '../leave-balances/entities/leave-ledger-entry.entity';
 
 describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level Workflows', () => {
   let service: LeaveRequestsService;
@@ -43,7 +50,10 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
     const usersMap: Record<string, any> = {
       [mockManagerId]: { id: mockManagerId, role: EmployeeRole.EMPLOYEE },
       [mockMgrMgrId]: { id: mockMgrMgrId, role: EmployeeRole.EMPLOYEE },
-      [mockSpecificPersonId]: { id: mockSpecificPersonId, role: EmployeeRole.EMPLOYEE },
+      [mockSpecificPersonId]: {
+        id: mockSpecificPersonId,
+        role: EmployeeRole.EMPLOYEE,
+      },
       [mockHrId]: { id: mockHrId, role: EmployeeRole.HR_ADMIN },
       [mockEmpId]: { id: mockEmpId, role: EmployeeRole.EMPLOYEE },
     };
@@ -53,19 +63,28 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         setLock: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockImplementation(() => Promise.resolve((service as any)._mockConflictingRequest || null)),
+        getOne: jest
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve((service as any)._mockConflictingRequest || null),
+          ),
       })),
       findOne: jest.fn().mockImplementation((entity, options) => {
         if (entity === LeaveRequest || entity.name === 'LeaveRequest') {
           return Promise.resolve(mockLeaveRequest);
         }
-        if (entity.name === 'Employee' || entity.constructor?.name === 'Employee') {
+        if (
+          entity.name === 'Employee' ||
+          entity.constructor?.name === 'Employee'
+        ) {
           const id = options?.where?.id;
           return Promise.resolve(usersMap[id] || null);
         }
         return Promise.resolve(null);
       }),
-      create: jest.fn().mockImplementation((entity, dto) => ({ id: 'new-req-uuid', ...dto })),
+      create: jest
+        .fn()
+        .mockImplementation((entity, dto) => ({ id: 'new-req-uuid', ...dto })),
       save: jest.fn().mockImplementation((item) => Promise.resolve(item)),
     };
 
@@ -88,10 +107,17 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
         { provide: getRepositoryToken(ApprovalInstance), useValue: {} },
         {
           provide: LeaveBalancesService,
-          useValue: { calculateBalancesForEmployee: jest.fn().mockResolvedValue({ balances: [{ leaveTypeId: 'lt-uuid-8888' }] }) },
+          useValue: {
+            calculateBalancesForEmployee: jest.fn().mockResolvedValue({
+              balances: [{ leaveTypeId: 'lt-uuid-8888' }],
+            }),
+          },
         },
         { provide: ApprovalWorkflowsService, useValue: {} },
-        { provide: AuditLogsService, useValue: { log: jest.fn().mockResolvedValue({}) } },
+        {
+          provide: AuditLogsService,
+          useValue: { log: jest.fn().mockResolvedValue({}) },
+        },
         { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
@@ -141,7 +167,9 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
     mockLeaveRequest.approvalInstances = [mgrStep, hrStep];
 
     // Early HR approval attempt blocked (ForbiddenException 403)
-    await expect(service.approveStep(mockRequestId, mockHrId, 'Early HR')).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.approveStep(mockRequestId, mockHrId, 'Early HR'),
+    ).rejects.toThrow(ForbiddenException);
 
     // Level 1 Manager approves
     await service.approveStep(mockRequestId, mockManagerId, 'Manager approved');
@@ -188,8 +216,12 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
     mockLeaveRequest.approvalInstances = [mgrStep, mgrMgrStep, hrStep];
 
     // Level 2 and Level 3 early attempts blocked (ForbiddenException)
-    await expect(service.approveStep(mockRequestId, mockMgrMgrId, 'Early Level 2')).rejects.toThrow(ForbiddenException);
-    await expect(service.approveStep(mockRequestId, mockHrId, 'Early Level 3')).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.approveStep(mockRequestId, mockMgrMgrId, 'Early Level 2'),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.approveStep(mockRequestId, mockHrId, 'Early Level 3'),
+    ).rejects.toThrow(ForbiddenException);
 
     // Level 1 approves -> Level 2 PENDING
     await service.approveStep(mockRequestId, mockManagerId, 'L1 Approved');
@@ -200,7 +232,9 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
     expect((service as any).applyLedger).not.toHaveBeenCalled();
 
     // Level 3 attempt still blocked
-    await expect(service.approveStep(mockRequestId, mockHrId, 'Level 3 Early')).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.approveStep(mockRequestId, mockHrId, 'Level 3 Early'),
+    ).rejects.toThrow(ForbiddenException);
 
     // Level 2 approves -> Level 3 PENDING
     await service.approveStep(mockRequestId, mockMgrMgrId, 'L2 Approved');
@@ -229,10 +263,16 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
     mockLeaveRequest.approvalInstances = [specStep];
 
     // Unauthorized manager attempt blocked
-    await expect(service.approveStep(mockRequestId, mockManagerId, 'Wrong user')).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.approveStep(mockRequestId, mockManagerId, 'Wrong user'),
+    ).rejects.toThrow(ForbiddenException);
 
     // Resolved specific person succeeds
-    await service.approveStep(mockRequestId, mockSpecificPersonId, 'Specific Approved');
+    await service.approveStep(
+      mockRequestId,
+      mockSpecificPersonId,
+      'Specific Approved',
+    );
     expect(specStep.status).toBe(ApprovalInstanceStatus.APPROVED);
   });
 
@@ -257,7 +297,11 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
     };
     mockLeaveRequest.approvalInstances = [step1, step2];
 
-    await service.rejectStep(mockRequestId, mockManagerId, 'Rejected at Level 1');
+    await service.rejectStep(
+      mockRequestId,
+      mockManagerId,
+      'Rejected at Level 1',
+    );
 
     expect(step1.status).toBe(ApprovalInstanceStatus.REJECTED);
     expect(step2.status).toBe(ApprovalInstanceStatus.SKIPPED);
@@ -266,7 +310,9 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
   });
 
   it('6. Employee ownership check: Unowned request approval progress throws 404 Not Found', async () => {
-    await expect(service.getApprovalProgress(mockRequestId, 'other-emp-id')).rejects.toThrow(NotFoundException);
+    await expect(
+      service.getApprovalProgress(mockRequestId, 'other-emp-id'),
+    ).rejects.toThrow(NotFoundException);
   });
 
   describe('7. Overlapping & Duplicate Leave Request Validation', () => {
@@ -290,7 +336,9 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
         expect(err).toBeInstanceOf(ConflictException);
         const res = err.getResponse();
         expect(res.code).toBe('LEAVE_REQUEST_DATE_OVERLAP');
-        expect(res.message).toBe('You already have a leave request for one or more selected days.');
+        expect(res.message).toBe(
+          'You already have a leave request for one or more selected days.',
+        );
         expect(res.conflictingRequest).toEqual({
           id: 'req-overlap-1',
           fromDate: '2026-08-10',
@@ -432,6 +480,181 @@ describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level
       } catch (err: any) {
         expect(err).not.toBeInstanceOf(ConflictException);
       }
+    });
+  });
+
+  describe('8. Cancellation', () => {
+    it('owner can cancel a PENDING request and does not touch the ledger', async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.PENDING;
+      mockLeaveRequest.approvalInstances = [
+        {
+          id: 'step-1',
+          status: ApprovalInstanceStatus.PENDING,
+          actionDate: null,
+        },
+      ];
+
+      const result = await service.cancel(mockEmpId, mockRequestId);
+
+      expect(result.status).toBe(LeaveRequestStatus.CANCELLED);
+      expect(mockLeaveRequest.approvalInstances[0].status).toBe(
+        ApprovalInstanceStatus.SKIPPED,
+      );
+      expect((service as any).applyLedger).not.toHaveBeenCalled();
+    });
+
+    it('owner can cancel an APPROVED request and it restores the balance via exactly one REVERSAL', async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.APPROVED;
+      mockLeaveRequest.approvalInstances = [
+        {
+          id: 'step-1',
+          status: ApprovalInstanceStatus.APPROVED,
+          actionDate: new Date(),
+        },
+      ];
+
+      const result = await service.cancel(mockEmpId, mockRequestId);
+
+      expect(result.status).toBe(LeaveRequestStatus.CANCELLED);
+      expect((service as any).applyLedger).toHaveBeenCalledTimes(1);
+      expect((service as any).applyLedger).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          id: mockRequestId,
+          leaveTypeId: mockLeaveRequest.leaveTypeId,
+        }),
+        LedgerTransactionType.REVERSAL,
+        mockEmpId,
+      );
+    });
+
+    it('a repeated cancellation cannot refund the balance twice', async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.APPROVED;
+      mockLeaveRequest.approvalInstances = [];
+
+      await service.cancel(mockEmpId, mockRequestId);
+      expect((service as any).applyLedger).toHaveBeenCalledTimes(1);
+
+      await expect(service.cancel(mockEmpId, mockRequestId)).rejects.toThrow(
+        ConflictException,
+      );
+      expect((service as any).applyLedger).toHaveBeenCalledTimes(1); // still only once
+    });
+
+    it("an employee cannot cancel another employee's request", async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.PENDING;
+      mockLeaveRequest.approvalInstances = [];
+
+      await expect(
+        service.cancel('someone-else-id', mockRequestId),
+      ).rejects.toThrow(ForbiddenException);
+      expect((service as any).applyLedger).not.toHaveBeenCalled();
+    });
+
+    it('a REJECTED request cannot be cancelled', async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.REJECTED;
+      await expect(service.cancel(mockEmpId, mockRequestId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('an already-CANCELLED request cannot be cancelled again', async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.CANCELLED;
+      await expect(service.cancel(mockEmpId, mockRequestId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('cancelling a non-existent request throws NotFoundException', async () => {
+      mockEm.findOne = jest.fn().mockResolvedValue(null);
+      await expect(service.cancel(mockEmpId, 'missing-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('a request whose dates have already passed cannot be cancelled', async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.PENDING;
+      mockLeaveRequest.endDate = '2020-01-05';
+      mockLeaveRequest.approvalInstances = [];
+
+      await expect(service.cancel(mockEmpId, mockRequestId)).rejects.toThrow(
+        ConflictException,
+      );
+      expect((service as any).applyLedger).not.toHaveBeenCalled();
+    });
+
+    it('a request whose dates are still in the future can be cancelled', async () => {
+      mockLeaveRequest.status = LeaveRequestStatus.PENDING;
+      mockLeaveRequest.endDate = '2099-01-05';
+      mockLeaveRequest.approvalInstances = [];
+
+      const result = await service.cancel(mockEmpId, mockRequestId);
+      expect(result.status).toBe(LeaveRequestStatus.CANCELLED);
+    });
+  });
+
+  describe('9. applyLedger REVERSAL arithmetic (real implementation, not the spy)', () => {
+    it('restores the exact number of cancelled days, creates exactly one REVERSAL entry, and writes a clear description', async () => {
+      (service as any).applyLedger.mockRestore();
+
+      const request: any = {
+        id: mockRequestId,
+        employeeId: mockEmpId,
+        leaveTypeId: 'lt-uuid-8888',
+        startDate: '2026-07-16',
+        endDate: '2026-07-20',
+        durationDays: 5,
+      };
+      const balance: any = {
+        id: 'bal-1',
+        employeeId: mockEmpId,
+        leaveTypeId: 'lt-uuid-8888',
+        year: 2026,
+        availableBalance: 10,
+        usedYtd: 0,
+      };
+      const leaveType: any = {
+        id: 'lt-uuid-8888',
+        label: 'Annual Leave',
+        trackingMode: 'AVAILABLE_BALANCE',
+      };
+      const ledgerCreateSpy = jest
+        .fn()
+        .mockImplementation((_entity, dto) => ({ id: 'ledger-1', ...dto }));
+
+      const localEm: any = {
+        findOne: jest.fn().mockImplementation((entity) => {
+          if (entity === LeaveBalance) return Promise.resolve(balance);
+          if (entity === LeaveType) return Promise.resolve(leaveType);
+          return Promise.resolve(null);
+        }),
+        create: jest
+          .fn()
+          .mockImplementation((entity, dto) =>
+            entity === LeaveLedgerEntry
+              ? ledgerCreateSpy(entity, dto)
+              : { ...dto },
+          ),
+        save: jest.fn().mockImplementation((item) => Promise.resolve(item)),
+      };
+
+      await (service as any).applyLedger(
+        localEm,
+        request,
+        LedgerTransactionType.REVERSAL,
+        mockEmpId,
+      );
+
+      expect(balance.availableBalance).toBe(15); // 10 restored + 5 reversed
+      expect(ledgerCreateSpy).toHaveBeenCalledTimes(1);
+      const ledgerDto = ledgerCreateSpy.mock.calls[0][1];
+      expect(ledgerDto.transactionType).toBe(LedgerTransactionType.REVERSAL);
+      expect(ledgerDto.signedAmount).toBe(5);
+      expect(ledgerDto.leaveTypeId).toBe('lt-uuid-8888');
+      expect(ledgerDto.referenceId).toBe(mockRequestId);
+      expect(ledgerDto.reason).toBe(
+        'Cancellation of Annual Leave from 16/07/2026 to 20/07/2026',
+      );
     });
   });
 });

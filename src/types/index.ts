@@ -79,9 +79,20 @@ export interface Holiday {
 }
 
 // Company Link
-export interface CompanyLink {
+export interface CompanyLinkEntry {
   id: number;
-  country: string;
-  flag: string;
+  label: string;
   url: string;
+  flag?: string;
+  country?: string;
+  icon?: string;
+  iconBg?: string;
+  subtitle?: string;
+}
+
+export interface CompanyLinkCategory {
+  value: string;
+  label: string;
+  searchable?: boolean;
+  links: CompanyLinkEntry[];
 }

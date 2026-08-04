@@ -1,4 +1,4 @@
-import type { Employee, LeaveType, LeaveBalance, LeaveLedgerEntry, LeaveRequest, Holiday, CompanyLink } from '../types';
+import type { Employee, LeaveType, LeaveBalance, LeaveLedgerEntry, LeaveRequest, Holiday, CompanyLinkEntry, CompanyLinkCategory } from '../types';
 
 // ─── 10 Leave Types ──────────────────────────────────────────────────────────
 export const leaveTypesList: LeaveType[] = [
@@ -89,28 +89,97 @@ export const upcomingHolidays: Holiday[] = [
   { id: 5, name: 'National Day',          date: '2026-12-02', country: 'UAE',      countryCode: 'AE', flag: '🇦🇪' },
 ];
 
-// ─── Company Links (Public Holidays by Country) ────────────────────────────
-export const companyLinks: CompanyLink[] = [
-  { id: 1,  country: 'Algeria',            flag: '🇩🇿', url: 'https://publicholidays.africa/algeria/' },
-  { id: 2,  country: 'Argentina',          flag: '🇦🇷', url: 'https://publicholidays.com.ar/' },
-  { id: 3,  country: 'Brazil',             flag: '🇧🇷', url: 'https://publicholidays.com.br/' },
-  { id: 4,  country: 'Canada',             flag: '🇨🇦', url: 'https://publicholidays.ca/' },
-  { id: 5,  country: 'Colombia',           flag: '🇨🇴', url: 'https://publicholidays.com.co/' },
-  { id: 6,  country: 'Dominican Republic', flag: '🇩🇴', url: 'https://publicholidays.com.do/' },
-  { id: 7,  country: 'Egypt',              flag: '🇪🇬', url: 'https://publicholidays.africa/egypt/' },
-  { id: 8,  country: 'France',             flag: '🇫🇷', url: 'https://publicholidays.fr/' },
-  { id: 9,  country: 'Germany',            flag: '🇩🇪', url: 'https://publicholidays.de/' },
-  { id: 10, country: 'India',              flag: '🇮🇳', url: 'https://publicholidays.in/' },
-  { id: 11, country: 'Lebanon',            flag: '🇱🇧', url: 'https://publicholidays.africa/lebanon/' },
-  { id: 12, country: 'Mexico',             flag: '🇲🇽', url: 'https://publicholidays.com.mx/' },
-  { id: 13, country: 'Morocco',            flag: '🇲🇦', url: 'https://publicholidays.africa/morocco/' },
-  { id: 14, country: 'Saudi Arabia',       flag: '🇸🇦', url: 'https://publicholidays.com.sa/' },
-  { id: 15, country: 'South Africa',       flag: '🇿🇦', url: 'https://publicholidays.co.za/' },
-  { id: 16, country: 'Spain',              flag: '🇪🇸', url: 'https://publicholidays.es/' },
-  { id: 17, country: 'Tunisia',            flag: '🇹🇳', url: 'https://publicholidays.africa/tunisia/' },
-  { id: 18, country: 'UAE',                flag: '🇦🇪', url: 'https://publicholidays.ae/' },
-  { id: 19, country: 'United Kingdom',     flag: '🇬🇧', url: 'https://publicholidays.co.uk/' },
-  { id: 20, country: 'USA',                flag: '🇺🇸', url: 'https://publicholidays.us/' },
+// ─── Company Links (by category) ───────────────────────────────────────────
+const publicHolidayCountries: { country: string; flag: string; url: string }[] = [
+  { country: 'Algeria',            flag: '🇩🇿', url: 'https://publicholidays.africa/algeria/' },
+  { country: 'Argentina',          flag: '🇦🇷', url: 'https://publicholidays.com.ar/' },
+  { country: 'Brazil',             flag: '🇧🇷', url: 'https://publicholidays.com.br/' },
+  { country: 'Canada',             flag: '🇨🇦', url: 'https://publicholidays.ca/' },
+  { country: 'Colombia',           flag: '🇨🇴', url: 'https://publicholidays.com.co/' },
+  { country: 'Dominican Republic', flag: '🇩🇴', url: 'https://publicholidays.com.do/' },
+  { country: 'Egypt',              flag: '🇪🇬', url: 'https://publicholidays.africa/egypt/' },
+  { country: 'France',             flag: '🇫🇷', url: 'https://publicholidays.fr/' },
+  { country: 'Germany',            flag: '🇩🇪', url: 'https://publicholidays.de/' },
+  { country: 'India',              flag: '🇮🇳', url: 'https://publicholidays.in/' },
+  { country: 'Lebanon',            flag: '🇱🇧', url: 'https://publicholidays.africa/lebanon/' },
+  { country: 'Mexico',             flag: '🇲🇽', url: 'https://publicholidays.com.mx/' },
+  { country: 'Morocco',            flag: '🇲🇦', url: 'https://publicholidays.africa/morocco/' },
+  { country: 'Saudi Arabia',       flag: '🇸🇦', url: 'https://publicholidays.com.sa/' },
+  { country: 'South Africa',       flag: '🇿🇦', url: 'https://publicholidays.co.za/' },
+  { country: 'Spain',              flag: '🇪🇸', url: 'https://publicholidays.es/' },
+  { country: 'Tunisia',            flag: '🇹🇳', url: 'https://publicholidays.africa/tunisia/' },
+  { country: 'UAE',                flag: '🇦🇪', url: 'https://publicholidays.ae/' },
+  { country: 'United Kingdom',     flag: '🇬🇧', url: 'https://publicholidays.co.uk/' },
+  { country: 'USA',                flag: '🇺🇸', url: 'https://publicholidays.us/' },
+];
+
+export const companyLinkCategories: CompanyLinkCategory[] = [
+  {
+    value: 'public-holidays',
+    label: 'Public Holidays',
+    searchable: true,
+    links: publicHolidayCountries.map((c, i): CompanyLinkEntry => ({
+      id: i + 1,
+      label: `${c.country} Public Holidays`,
+      country: c.country,
+      flag: c.flag,
+      url: c.url,
+    })),
+  },
+  {
+    value: 'employee-referrals',
+    label: 'Employee Referrals',
+    links: [{
+      id: 1, label: 'Employee Referral Portal', url: '#',
+      icon: '🤝', iconBg: 'bg-amber-50', subtitle: 'Refer candidates and track status',
+    }],
+  },
+  {
+    value: 'mashrek-medical-insurance',
+    label: 'Mashrek Medical Insurance',
+    links: [{
+      id: 1, label: 'Mashrek Medical Insurance Portal', url: '#',
+      icon: '🪪', iconBg: 'bg-rose-50', subtitle: 'Medical coverage and network providers',
+    }],
+  },
+  {
+    value: 'leave-absence-policy',
+    label: 'Company Leave and Absence Policy',
+    links: [{
+      id: 1, label: 'Company Leave and Absence Policy', url: '#',
+      icon: '📄', iconBg: 'bg-slate-100', subtitle: 'Official leave rules & entitlements document',
+    }],
+  },
+  {
+    value: 'leave-request-demo',
+    label: 'Leave Request Demo',
+    links: [
+      {
+        id: 1, label: 'Leave Request Demo - User', url: '#',
+        icon: '👤', iconBg: 'bg-slate-800', subtitle: 'Employee leave request workflow demo',
+      },
+      {
+        id: 2, label: 'Leave Request Demo - Manager', url: '#',
+        icon: '🧑‍💼', iconBg: 'bg-blue-50', subtitle: 'Manager approval workflow demo',
+      },
+    ],
+  },
+  {
+    value: 'handbook-novelus',
+    label: 'Employee Handbook - Novelus',
+    links: [{
+      id: 1, label: 'Employee Handbook - Novelus', url: '#',
+      icon: '📘', iconBg: 'bg-indigo-50', subtitle: 'Company policies and guidelines',
+    }],
+  },
+  {
+    value: 'handbook-yuvo',
+    label: 'Employee Handbook - Yuvo',
+    links: [{
+      id: 1, label: 'Employee Handbook - Yuvo', url: '#',
+      icon: '📗', iconBg: 'bg-emerald-50', subtitle: 'Company policies and guidelines',
+    }],
+  },
 ];
 
 // Helper to filter out out-today and out-tomorrow for backwards compatibility

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   UnauthorizedException,
@@ -26,8 +27,15 @@ import { LeaveType } from '../leave-types/entities/leave-type.entity';
 import { ApprovalWorkflowsService } from '../approval-workflows/approval-workflows.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
+function formatDateDMY(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
 @Injectable()
 export class LeaveRequestsService {
+  private readonly logger = new Logger(LeaveRequestsService.name);
+
   constructor(
     @InjectRepository(LeaveRequest)
     private readonly requestRepo: Repository<LeaveRequest>,
@@ -41,11 +49,19 @@ export class LeaveRequestsService {
 
   async create(
     employeeId: string,
-    dto: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; reason?: string },
+    dto: {
+      leaveTypeId: string;
+      startDate: string;
+      endDate: string;
+      durationDays: number;
+      reason?: string;
+    },
   ) {
     // Validate dates
     if (new Date(dto.startDate) > new Date(dto.endDate)) {
-      throw new BadRequestException('Start date must be less than or equal to end date.');
+      throw new BadRequestException(
+        'Start date must be less than or equal to end date.',
+      );
     }
 
     return this.dataSource.transaction(async (em) => {
@@ -54,19 +70,26 @@ export class LeaveRequestsService {
         .createQueryBuilder(LeaveRequest, 'lr')
         .where('lr.employeeId = :employeeId', { employeeId })
         .andWhere('lr.status IN (:...activeStatuses)', {
-          activeStatuses: [LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED],
+          activeStatuses: [
+            LeaveRequestStatus.PENDING,
+            LeaveRequestStatus.APPROVED,
+          ],
         })
-        .andWhere('lr.startDate <= :newEndDate AND lr.endDate >= :newStartDate', {
-          newStartDate: dto.startDate,
-          newEndDate: dto.endDate,
-        })
+        .andWhere(
+          'lr.startDate <= :newEndDate AND lr.endDate >= :newStartDate',
+          {
+            newStartDate: dto.startDate,
+            newEndDate: dto.endDate,
+          },
+        )
         .setLock('pessimistic_write')
         .getOne();
 
       if (conflictingRequest) {
         throw new ConflictException({
           code: 'LEAVE_REQUEST_DATE_OVERLAP',
-          message: 'You already have a leave request for one or more selected days.',
+          message:
+            'You already have a leave request for one or more selected days.',
           conflictingRequest: {
             id: conflictingRequest.id,
             fromDate: conflictingRequest.startDate,
@@ -121,7 +144,8 @@ export class LeaveRequestsService {
           }
           resolvedApproverId = employee.manager.managerId;
         } else if (step.approverType === ApproverType.SPECIFIC_PERSON) {
-          const empId = (step as any).specificApproverEmployeeId || step.specificApproverId;
+          const empId =
+            (step as any).specificApproverEmployeeId || step.specificApproverId;
           if (empId) {
             resolvedApproverId = empId;
           } else if (step.specificApproverEmail) {
@@ -135,7 +159,9 @@ export class LeaveRequestsService {
             }
             resolvedApproverId = specEmp.id;
           } else {
-            throw new BadRequestException('Submission failed: SPECIFIC_PERSON step lacks id and email configuration.');
+            throw new BadRequestException(
+              'Submission failed: SPECIFIC_PERSON step lacks id and email configuration.',
+            );
           }
         } else if (step.approverType === ApproverType.HR) {
           // HR approvers are resolved on-the-fly when they perform the action
@@ -152,10 +178,17 @@ export class LeaveRequestsService {
       }
 
       // 4. Validate leave type is in active policy (overdraft is allowed — balance may go negative)
-      const balancesData = await this.leaveBalancesService.calculateBalancesForEmployee(employeeId);
-      const balanceConfig = balancesData.balances.find((b) => b.leaveTypeId === dto.leaveTypeId);
+      const balancesData =
+        await this.leaveBalancesService.calculateBalancesForEmployee(
+          employeeId,
+        );
+      const balanceConfig = balancesData.balances.find(
+        (b) => b.leaveTypeId === dto.leaveTypeId,
+      );
       if (!balanceConfig) {
-        throw new BadRequestException('Leave type is not available in your active policy.');
+        throw new BadRequestException(
+          'Leave type is not available in your active policy.',
+        );
       }
       // NOTE: overdraft is intentionally permitted — balance will be stored as negative.
 
@@ -189,7 +222,10 @@ export class LeaveRequestsService {
           stepOrder: s.stepOrder,
           approverType: s.approverType,
           resolvedApproverId: s.resolvedApproverId,
-          status: s.stepOrder === 1 ? ApprovalInstanceStatus.PENDING : ApprovalInstanceStatus.WAITING,
+          status:
+            s.stepOrder === 1
+              ? ApprovalInstanceStatus.PENDING
+              : ApprovalInstanceStatus.WAITING,
         });
       });
 
@@ -219,7 +255,9 @@ export class LeaveRequestsService {
   }
 
   async getMyApprovals(employeeId: string) {
-    const employee = await this.dataSource.getRepository(Employee).findOne({ where: { id: employeeId } });
+    const employee = await this.dataSource
+      .getRepository(Employee)
+      .findOne({ where: { id: employeeId } });
     if (!employee) throw new NotFoundException('Employee not found');
 
     const qb = this.instanceRepo
@@ -228,13 +266,18 @@ export class LeaveRequestsService {
       .leftJoinAndSelect('lr.employee', 'emp')
       .leftJoinAndSelect('lr.leaveType', 'lt')
       .where('ai.status = :status', { status: ApprovalInstanceStatus.PENDING })
-      .andWhere('lr.status = :reqStatus', { reqStatus: LeaveRequestStatus.PENDING });
+      .andWhere('lr.status = :reqStatus', {
+        reqStatus: LeaveRequestStatus.PENDING,
+      });
 
     if (employee.role === EmployeeRole.HR_ADMIN) {
-      qb.andWhere('(ai.resolvedApproverId = :employeeId OR ai.approverType = :hrType)', {
-        employeeId,
-        hrType: ApproverType.HR,
-      });
+      qb.andWhere(
+        '(ai.resolvedApproverId = :employeeId OR ai.approverType = :hrType)',
+        {
+          employeeId,
+          hrType: ApproverType.HR,
+        },
+      );
     } else {
       qb.andWhere('ai.resolvedApproverId = :employeeId', { employeeId });
     }
@@ -272,18 +315,24 @@ export class LeaveRequestsService {
       const request = await em.findOne(LeaveRequest, {
         where: { id: requestId },
         relations: { approvalInstances: { step: true } },
-      })!
+      });
 
       if (!request) throw new NotFoundException('Leave request not found');
       if (request.status !== LeaveRequestStatus.PENDING) {
-        throw new BadRequestException('Action rejected: leave request is already finalized.');
+        throw new BadRequestException(
+          'Action rejected: leave request is already finalized.',
+        );
       }
 
       // Check current PENDING step
       const steps = request.approvalInstances || [];
-      const currentStep = steps.find((s) => s.status === ApprovalInstanceStatus.PENDING);
+      const currentStep = steps.find(
+        (s) => s.status === ApprovalInstanceStatus.PENDING,
+      );
       if (!currentStep) {
-        throw new BadRequestException('No pending approval step found for this request.');
+        throw new BadRequestException(
+          'No pending approval step found for this request.',
+        );
       }
 
       // Validate authorization
@@ -295,12 +344,16 @@ export class LeaveRequestsService {
 
       if (isHRType) {
         if (actor.role !== EmployeeRole.HR_ADMIN) {
-          throw new ForbiddenException('Only HR administrators can approve this step.');
+          throw new ForbiddenException(
+            'Only HR administrators can approve this step.',
+          );
         }
         currentStep.resolvedApproverId = actorId;
       } else {
         if (!isResolvedMatch) {
-          throw new ForbiddenException('You are not authorized to approve this step.');
+          throw new ForbiddenException(
+            'You are not authorized to approve this step.',
+          );
         }
       }
 
@@ -316,20 +369,27 @@ export class LeaveRequestsService {
         AuditActionType.APPROVAL_STEP_APPROVED,
         'ApprovalInstance',
         currentStep.id,
-        { newValues: { ...currentStep, employeeId: request.employeeId }, reason: decisionNote },
+        {
+          newValues: { ...currentStep, employeeId: request.employeeId },
+          reason: decisionNote,
+        },
         em,
       );
 
       // Resolve next steps
       const orderedSteps = steps.sort((a, b) => a.stepOrder - b.stepOrder);
       const nextRequiredStep = orderedSteps.find(
-        (s) => s.stepOrder > currentStep.stepOrder && (s.step?.isRequired ?? true),
+        (s) =>
+          s.stepOrder > currentStep.stepOrder && (s.step?.isRequired ?? true),
       );
 
       if (nextRequiredStep) {
         // Skip intermediate optional steps
         for (const s of orderedSteps) {
-          if (s.stepOrder > currentStep.stepOrder && s.stepOrder < nextRequiredStep.stepOrder) {
+          if (
+            s.stepOrder > currentStep.stepOrder &&
+            s.stepOrder < nextRequiredStep.stepOrder
+          ) {
             s.status = ApprovalInstanceStatus.SKIPPED;
             s.actionDate = new Date();
             await em.save(s);
@@ -374,7 +434,12 @@ export class LeaveRequestsService {
         await em.save(request);
 
         // Apply ledger usage atomically exactly once
-        await this.applyLedger(em, request, LedgerTransactionType.USAGE, actorId);
+        await this.applyLedger(
+          em,
+          request,
+          LedgerTransactionType.USAGE,
+          actorId,
+        );
 
         // Load relations for description clarity
         const logRequest = await em.findOne(LeaveRequest, {
@@ -417,17 +482,21 @@ export class LeaveRequestsService {
       const request = await em.findOne(LeaveRequest, {
         where: { id: requestId },
         relations: { approvalInstances: { step: true } },
-      })!;
+      });
 
       if (!request) throw new NotFoundException('Leave request not found');
 
       if (request.status !== LeaveRequestStatus.PENDING) {
-        throw new BadRequestException('Action rejected: leave request is already finalized.');
+        throw new BadRequestException(
+          'Action rejected: leave request is already finalized.',
+        );
       }
 
       // Get current PENDING step
       const steps = request.approvalInstances || [];
-      const currentStep = steps.find((s) => s.status === ApprovalInstanceStatus.PENDING);
+      const currentStep = steps.find(
+        (s) => s.status === ApprovalInstanceStatus.PENDING,
+      );
       if (!currentStep) {
         throw new BadRequestException('No pending approval step found.');
       }
@@ -441,7 +510,9 @@ export class LeaveRequestsService {
 
       if (isHRType) {
         if (actor.role !== EmployeeRole.HR_ADMIN) {
-          throw new ForbiddenException('Only HR administrators can reject this step.');
+          throw new ForbiddenException(
+            'Only HR administrators can reject this step.',
+          );
         }
         currentStep.resolvedApproverId = actorId;
       } else {
@@ -464,7 +535,10 @@ export class LeaveRequestsService {
         AuditActionType.APPROVAL_STEP_REJECTED,
         'ApprovalInstance',
         currentStep.id,
-        { newValues: { ...currentStep, employeeId: request.employeeId }, reason },
+        {
+          newValues: { ...currentStep, employeeId: request.employeeId },
+          reason,
+        },
         em,
       );
 
@@ -520,21 +594,36 @@ export class LeaveRequestsService {
     return this.dataSource.transaction(async (em) => {
       // Pessimistic lock (no relations to avoid FOR UPDATE on outer joins)
       const requestLock = await em.findOne(LeaveRequest, {
-        where: { id: requestId, employeeId },
+        where: { id: requestId },
         lock: { mode: 'pessimistic_write' },
       });
       if (!requestLock) throw new NotFoundException('Leave request not found');
+      if (requestLock.employeeId !== employeeId) {
+        throw new ForbiddenException('You do not own this leave request.');
+      }
 
       // Reload with relations after acquiring the lock
       const request = await em.findOne(LeaveRequest, {
-        where: { id: requestId, employeeId },
+        where: { id: requestId },
         relations: { approvalInstances: true },
-      })!
+      });
 
       if (!request) throw new NotFoundException('Leave request not found');
-      if (request.status === LeaveRequestStatus.CANCELLED) return request;
-      if (request.status === LeaveRequestStatus.REJECTED) {
-        throw new BadRequestException('Cannot cancel a rejected request.');
+      if (
+        request.status === LeaveRequestStatus.CANCELLED ||
+        request.status === LeaveRequestStatus.REJECTED
+      ) {
+        throw new ConflictException(
+          'This leave request cannot be cancelled in its current status.',
+        );
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (new Date(request.endDate) < today) {
+        throw new ConflictException(
+          'This leave request cannot be cancelled because its dates have already passed.',
+        );
       }
 
       const wasApproved = request.status === LeaveRequestStatus.APPROVED;
@@ -542,7 +631,10 @@ export class LeaveRequestsService {
       // Skip all remaining steps
       const steps = request.approvalInstances || [];
       for (const s of steps) {
-        if (s.status === ApprovalInstanceStatus.WAITING || s.status === ApprovalInstanceStatus.PENDING) {
+        if (
+          s.status === ApprovalInstanceStatus.WAITING ||
+          s.status === ApprovalInstanceStatus.PENDING
+        ) {
           s.status = ApprovalInstanceStatus.SKIPPED;
           s.actionDate = new Date();
           await em.save(s);
@@ -580,7 +672,12 @@ export class LeaveRequestsService {
 
       if (wasApproved) {
         // Reverse usage in ledger exactly once
-        await this.applyLedger(em, request, LedgerTransactionType.REVERSAL, employeeId);
+        await this.applyLedger(
+          em,
+          request,
+          LedgerTransactionType.REVERSAL,
+          employeeId,
+        );
       }
 
       return saved;
@@ -588,10 +685,20 @@ export class LeaveRequestsService {
   }
 
   async hrFindAll(query: any, actorId?: string) {
-    const { status, employeeId, department, country, leaveTypeId, startDate, endDate } = query;
+    const {
+      status,
+      employeeId,
+      department,
+      country,
+      leaveTypeId,
+      startDate,
+      endDate,
+    } = query;
 
     const actor = actorId
-      ? await this.dataSource.getRepository(Employee).findOne({ where: { id: actorId } })
+      ? await this.dataSource
+          .getRepository(Employee)
+          .findOne({ where: { id: actorId } })
       : null;
 
     const qb = this.requestRepo
@@ -609,7 +716,8 @@ export class LeaveRequestsService {
     if (employeeId) qb.andWhere('lr.employeeId = :employeeId', { employeeId });
     if (department) qb.andWhere('emp.department = :department', { department });
     if (country) qb.andWhere('country.name = :country', { country });
-    if (leaveTypeId) qb.andWhere('lr.leaveTypeId = :leaveTypeId', { leaveTypeId });
+    if (leaveTypeId)
+      qb.andWhere('lr.leaveTypeId = :leaveTypeId', { leaveTypeId });
     if (startDate) qb.andWhere('lr.startDate >= :startDate', { startDate });
     if (endDate) qb.andWhere('lr.endDate <= :endDate', { endDate });
 
@@ -626,12 +734,18 @@ export class LeaveRequestsService {
       const currentStepStatus = currentPendingStep?.status ?? null;
       const currentApproverName =
         currentPendingStep?.resolvedApprover?.fullName ||
-        (currentPendingStep?.approverType === ApproverType.HR ? 'HR Department' : 'Pending');
+        (currentPendingStep?.approverType === ApproverType.HR
+          ? 'HR Department'
+          : 'Pending');
 
       let canApprove = false;
       let canReject = false;
 
-      if (lr.status === LeaveRequestStatus.PENDING && currentPendingStep && actor) {
+      if (
+        lr.status === LeaveRequestStatus.PENDING &&
+        currentPendingStep &&
+        actor
+      ) {
         if (currentPendingStep.approverType === ApproverType.HR) {
           canApprove = actor.role === EmployeeRole.HR_ADMIN;
           canReject = actor.role === EmployeeRole.HR_ADMIN;
@@ -651,7 +765,8 @@ export class LeaveRequestsService {
         team: lr.employee?.unit,
         country: lr.employee?.country?.name,
         policyId: lr.employee?.policyAssignments?.[0]?.leavePolicyId,
-        policyName: lr.employee?.policyAssignments?.[0]?.leavePolicy?.policyName,
+        policyName:
+          lr.employee?.policyAssignments?.[0]?.leavePolicy?.policyName,
         leaveTypeId: lr.leaveTypeId,
         leaveTypeName: lr.leaveType?.label,
         startDate: lr.startDate,
@@ -686,7 +801,11 @@ export class LeaveRequestsService {
 
   // HR Approves as override / direct action (satisfies existing HR endpoints)
   async hrApprove(requestId: string, reviewerId: string) {
-    return this.approveStep(requestId, reviewerId, 'Approved directly by HR override');
+    return this.approveStep(
+      requestId,
+      reviewerId,
+      'Approved directly by HR override',
+    );
   }
 
   // HR Rejects as override
@@ -752,15 +871,28 @@ export class LeaveRequestsService {
     return balance!;
   }
 
-  private async applyLedger(em: EntityManager, request: LeaveRequest, type: LedgerTransactionType, performerId: string) {
+  private async applyLedger(
+    em: EntityManager,
+    request: LeaveRequest,
+    type: LedgerTransactionType,
+    performerId: string,
+  ) {
     const year = new Date(request.startDate).getFullYear();
-    const balance = await this.getOrCreateBalance(em, request.employeeId, request.leaveTypeId, year);
+    const balance = await this.getOrCreateBalance(
+      em,
+      request.employeeId,
+      request.leaveTypeId,
+      year,
+    );
 
-    const leaveType = await em.findOne(LeaveType, { where: { id: request.leaveTypeId } });
+    const leaveType = await em.findOne(LeaveType, {
+      where: { id: request.leaveTypeId },
+    });
     if (!leaveType) throw new NotFoundException('Leave type not found');
 
     const amount = request.durationDays;
-    const signedAmount = type === LedgerTransactionType.USAGE ? -amount : amount;
+    const signedAmount =
+      type === LedgerTransactionType.USAGE ? -amount : amount;
 
     let resultingBalance = 0;
     if (leaveType.trackingMode === 'USAGE_YTD') {
@@ -780,7 +912,10 @@ export class LeaveRequestsService {
       transactionType: type,
       signedAmount,
       resultingBalance,
-      reason: type === LedgerTransactionType.USAGE ? 'Approved Leave Request' : 'Cancelled approved leave request',
+      reason:
+        type === LedgerTransactionType.USAGE
+          ? 'Approved Leave Request'
+          : `Cancellation of ${leaveType.label} from ${formatDateDMY(request.startDate)} to ${formatDateDMY(request.endDate)}`,
       referenceType: 'LEAVE_REQUEST',
       referenceId: request.id,
       performedByEmployeeId: performerId,
@@ -790,7 +925,9 @@ export class LeaveRequestsService {
     // Audit ledger creation
     await this.auditService.log(
       performerId,
-      type === LedgerTransactionType.USAGE ? AuditActionType.LEDGER_USAGE_CREATED : AuditActionType.LEDGER_REVERSAL_CREATED,
+      type === LedgerTransactionType.USAGE
+        ? AuditActionType.LEDGER_USAGE_CREATED
+        : AuditActionType.LEDGER_REVERSAL_CREATED,
       'LeaveLedgerEntry',
       ledgerEntry.id,
       { newValues: ledgerEntry },
@@ -801,15 +938,15 @@ export class LeaveRequestsService {
   private getApproverRoleLabel(approverType: ApproverType): string {
     switch (approverType) {
       case ApproverType.MANAGER:
-        return "Employee’s Manager";
+        return 'Employee’s Manager';
       case ApproverType.MANAGERS_MANAGER:
-        return "Manager’s Manager";
+        return 'Manager’s Manager';
       case ApproverType.SPECIFIC_PERSON:
-        return "Specific Approver";
+        return 'Specific Approver';
       case ApproverType.HR:
-        return "HR Department";
+        return 'HR Department';
       default:
-        return "Approver";
+        return 'Approver';
     }
   }
 
@@ -823,13 +960,23 @@ export class LeaveRequestsService {
       throw new NotFoundException('Leave request not found');
     }
 
-    const actor = await this.dataSource.getRepository(Employee).findOne({ where: { id: employeeId } });
-    if (!actor || (request.employeeId !== employeeId && actor.role !== EmployeeRole.HR_ADMIN)) {
+    const actor = await this.dataSource
+      .getRepository(Employee)
+      .findOne({ where: { id: employeeId } });
+    if (
+      !actor ||
+      (request.employeeId !== employeeId &&
+        actor.role !== EmployeeRole.HR_ADMIN)
+    ) {
       throw new NotFoundException('Leave request not found');
     }
 
-    const steps = [...(request.approvalInstances || [])].sort((a, b) => a.stepOrder - b.stepOrder);
-    const currentPendingStep = steps.find((s) => s.status === ApprovalInstanceStatus.PENDING);
+    const steps = [...(request.approvalInstances || [])].sort(
+      (a, b) => a.stepOrder - b.stepOrder,
+    );
+    const currentPendingStep = steps.find(
+      (s) => s.status === ApprovalInstanceStatus.PENDING,
+    );
 
     const totalRequiredSteps = steps.length;
     const currentStepOrder = currentPendingStep?.stepOrder ?? null;
@@ -843,13 +990,19 @@ export class LeaveRequestsService {
 
     if (request.status === LeaveRequestStatus.APPROVED) {
       finalDecision = 'APPROVED';
-      finalDecisionDate = request.reviewedAt ? request.reviewedAt.toISOString() : request.updatedAt.toISOString();
+      finalDecisionDate = request.reviewedAt
+        ? request.reviewedAt.toISOString()
+        : request.updatedAt.toISOString();
     } else if (request.status === LeaveRequestStatus.REJECTED) {
       finalDecision = 'REJECTED';
-      finalDecisionDate = request.reviewedAt ? request.reviewedAt.toISOString() : request.updatedAt.toISOString();
+      finalDecisionDate = request.reviewedAt
+        ? request.reviewedAt.toISOString()
+        : request.updatedAt.toISOString();
     } else if (request.status === LeaveRequestStatus.CANCELLED) {
       finalDecision = 'CANCELLED';
-      finalDecisionDate = request.updatedAt ? request.updatedAt.toISOString() : null;
+      finalDecisionDate = request.updatedAt
+        ? request.updatedAt.toISOString()
+        : null;
     }
 
     return {
@@ -883,10 +1036,15 @@ export class LeaveRequestsService {
 
     if (!request) throw new NotFoundException('Leave request not found');
 
-    const actor = await this.dataSource.getRepository(Employee).findOne({ where: { id: employeeId } });
+    const actor = await this.dataSource
+      .getRepository(Employee)
+      .findOne({ where: { id: employeeId } });
     if (!actor) throw new UnauthorizedException('Invalid employee ID');
 
-    if (request.employeeId !== employeeId && actor.role !== EmployeeRole.HR_ADMIN) {
+    if (
+      request.employeeId !== employeeId &&
+      actor.role !== EmployeeRole.HR_ADMIN
+    ) {
       throw new NotFoundException('Leave request not found');
     }
 
@@ -901,8 +1059,12 @@ export class LeaveRequestsService {
     });
 
     return requests.map((lr) => {
-      const steps = [...(lr.approvalInstances || [])].sort((a, b) => a.stepOrder - b.stepOrder);
-      const currentPendingStep = steps.find((s) => s.status === ApprovalInstanceStatus.PENDING);
+      const steps = [...(lr.approvalInstances || [])].sort(
+        (a, b) => a.stepOrder - b.stepOrder,
+      );
+      const currentPendingStep = steps.find(
+        (s) => s.status === ApprovalInstanceStatus.PENDING,
+      );
       const currentStepOrder = currentPendingStep?.stepOrder ?? null;
       const currentApproverType = currentPendingStep?.approverType ?? null;
       const currentApproverLabel = currentPendingStep
@@ -938,7 +1100,10 @@ export class LeaveRequestsService {
     });
   }
 
-  async processExpiredRequests(): Promise<{ processedCount: number; autoApprovedIds: string[] }> {
+  async processExpiredRequests(): Promise<{
+    processedCount: number;
+    autoApprovedIds: string[];
+  }> {
     const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
     const cutoffDate = new Date(Date.now() - FIVE_DAYS_MS);
 
@@ -955,9 +1120,16 @@ export class LeaveRequestsService {
     for (const req of expiredRequests) {
       try {
         await this.dataSource.transaction(async (em) => {
-          const request = await em.findOne(LeaveRequest, {
+          // Pessimistic lock (no relations to avoid FOR UPDATE on outer joins)
+          const requestLock = await em.findOne(LeaveRequest, {
             where: { id: req.id },
             lock: { mode: 'pessimistic_write' },
+          });
+          if (!requestLock || requestLock.status !== LeaveRequestStatus.PENDING) return;
+
+          // Reload with relations after acquiring the lock
+          const request = await em.findOne(LeaveRequest, {
+            where: { id: req.id },
             relations: { approvalInstances: { step: true } },
           });
 
@@ -966,7 +1138,10 @@ export class LeaveRequestsService {
           // Approve all pending/waiting approval instances
           const instances = request.approvalInstances || [];
           for (const inst of instances) {
-            if (inst.status === ApprovalInstanceStatus.PENDING || inst.status === ApprovalInstanceStatus.WAITING) {
+            if (
+              inst.status === ApprovalInstanceStatus.PENDING ||
+              inst.status === ApprovalInstanceStatus.WAITING
+            ) {
               inst.status = ApprovalInstanceStatus.APPROVED;
               inst.decisionNote = 'System Auto-Approved (Expired after 5 days)';
               inst.actionDate = new Date();
@@ -980,7 +1155,12 @@ export class LeaveRequestsService {
           await em.save(request);
 
           // Deduct ledger balance
-          await this.applyLedger(em, request, LedgerTransactionType.USAGE, request.employeeId);
+          await this.applyLedger(
+            em,
+            request,
+            LedgerTransactionType.USAGE,
+            request.employeeId,
+          );
 
           // Audit log for system auto-approval
           await this.auditService.log(
@@ -988,14 +1168,22 @@ export class LeaveRequestsService {
             AuditActionType.LEAVE_REQUEST_APPROVED,
             'LeaveRequest',
             request.id,
-            { newValues: request, reason: 'Auto-approved by system (5-day expiration rule)' },
+            {
+              newValues: request,
+              reason: 'Auto-approved by system (5-day expiration rule)',
+            },
             em,
           );
 
           autoApprovedIds.push(request.id);
         });
       } catch (e) {
-        // Continue processing remaining expired requests if one fails
+        // Log and continue processing the remaining expired requests — a
+        // silently swallowed error here previously made auto-approval
+        // failures invisible and effectively permanent.
+        this.logger.error(
+          `[processExpiredRequests] Failed to auto-approve request ${req.id}: ${e instanceof Error ? e.message : e}`,
+        );
       }
     }
 

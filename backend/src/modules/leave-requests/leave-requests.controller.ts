@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
   Param,
   Put,
+  Patch,
   Get,
   Query,
   UseGuards,
@@ -23,43 +24,60 @@ export class LeaveRequestsController {
   @ApiOperation({ summary: 'Submit a new leave request' })
   create(
     @Headers('x-employee-id') employeeId: string,
-    @Body() dto: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; reason?: string },
+    @Body()
+    dto: {
+      leaveTypeId: string;
+      startDate: string;
+      endDate: string;
+      durationDays: number;
+      reason?: string;
+    },
   ) {
-    if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!employeeId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.create(employeeId, dto);
   }
 
   // --- STATIC & PREFIX ROUTES MUST BE REGISTERED BEFORE DYNAMIC :id ROUTES ---
 
   @Get('my-approvals')
-  @ApiOperation({ summary: 'Get active workflow approvals pending for the current employee' })
+  @ApiOperation({
+    summary: 'Get active workflow approvals pending for the current employee',
+  })
   getMyApprovals(@Headers('x-employee-id') employeeId: string) {
-    if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!employeeId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.getMyApprovals(employeeId);
   }
 
   @Get('my-requests')
   @ApiOperation({ summary: 'Get leave requests for the logged-in employee' })
   getMyRequests(@Headers('x-employee-id') employeeId: string) {
-    if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!employeeId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.findMyRequests(employeeId);
   }
 
   @Get('my')
   @ApiOperation({ summary: 'Alias for my-requests' })
   getMy(@Headers('x-employee-id') employeeId: string) {
-    if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!employeeId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.findMyRequests(employeeId);
   }
 
   @Get('whos-out')
-  @ApiOperation({ summary: 'Get active leave requests for Who is Out dashboard section' })
+  @ApiOperation({
+    summary: 'Get active leave requests for Who is Out dashboard section',
+  })
   getWhosOut() {
     return this.service.getWhosOut();
   }
 
   @Post('process-expired')
-  @ApiOperation({ summary: 'Auto-approve pending leave requests pending for 5 days or more' })
+  @ApiOperation({
+    summary: 'Auto-approve pending leave requests pending for 5 days or more',
+  })
   processExpired() {
     return this.service.processExpiredRequests();
   }
@@ -67,10 +85,7 @@ export class LeaveRequestsController {
   @Get('hr')
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Get all leave requests for HR' })
-  hrFindAll(
-    @Headers('x-employee-id') actorId: string,
-    @Query() query: any,
-  ) {
+  hrFindAll(@Headers('x-employee-id') actorId: string, @Query() query: any) {
     return this.service.hrFindAll(query, actorId);
   }
 
@@ -81,7 +96,8 @@ export class LeaveRequestsController {
     @Headers('x-employee-id') reviewerId: string,
     @Param('id') id: string,
   ) {
-    if (!reviewerId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!reviewerId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.hrApprove(id, reviewerId);
   }
 
@@ -93,61 +109,75 @@ export class LeaveRequestsController {
     @Param('id') id: string,
     @Body('reason') reason: string,
   ) {
-    if (!reviewerId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!reviewerId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.hrReject(id, reviewerId, reason);
   }
 
   // --- DYNAMIC :id ROUTES ---
 
   @Get(':id/approval-progress')
-  @ApiOperation({ summary: 'Get detailed approval progress timeline for a leave request' })
+  @ApiOperation({
+    summary: 'Get detailed approval progress timeline for a leave request',
+  })
   getApprovalProgress(
     @Headers('x-employee-id') employeeId: string,
     @Param('id') id: string,
   ) {
-    if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!employeeId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.getApprovalProgress(id, employeeId);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a specific leave request by ID with ownership check' })
+  @ApiOperation({
+    summary: 'Get a specific leave request by ID with ownership check',
+  })
   findOne(
     @Headers('x-employee-id') employeeId: string,
     @Param('id') id: string,
   ) {
-    if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!employeeId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.findOneWithOwnership(id, employeeId);
   }
 
   @Put(':id/approve')
-  @ApiOperation({ summary: 'Approve the current pending step of a leave request' })
+  @ApiOperation({
+    summary: 'Approve the current pending step of a leave request',
+  })
   approve(
     @Headers('x-employee-id') actorId: string,
     @Param('id') id: string,
     @Body('comment') comment?: string,
   ) {
-    if (!actorId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!actorId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.approveStep(id, actorId, comment);
   }
 
   @Put(':id/reject')
-  @ApiOperation({ summary: 'Reject the current pending step of a leave request' })
+  @ApiOperation({
+    summary: 'Reject the current pending step of a leave request',
+  })
   reject(
     @Headers('x-employee-id') actorId: string,
     @Param('id') id: string,
     @Body('reason') reason: string,
   ) {
-    if (!actorId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!actorId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.rejectStep(id, actorId, reason);
   }
 
-  @Put(':id/cancel')
+  @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancel a pending or approved leave request' })
   cancel(
     @Headers('x-employee-id') employeeId: string,
     @Param('id') id: string,
   ) {
-    if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
+    if (!employeeId)
+      throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.cancel(employeeId, id);
   }
 }
