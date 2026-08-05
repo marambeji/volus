@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, User, Users, CheckSquare, Calendar, Clock, X } from 'lucide-react';
+import { Home, User, Users, CheckSquare, Calendar, Clock, BarChart3, X } from 'lucide-react';
 
 interface NavbarProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ const sections = [
       { label: 'Home', path: '/employee/dashboard', icon: Home },
       { label: 'Approval Progress', path: '/employee/leave-tracking', icon: Clock },
       { label: 'Full Calendar', path: '/employee/full-calendar', icon: Calendar },
+      { label: 'Reports', path: '/employee/reports', icon: BarChart3 },
     ]
   },
   {

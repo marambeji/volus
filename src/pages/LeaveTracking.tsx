@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Clock, Calendar, CheckCircle2, ChevronRight, RefreshCw, FileCheck } from 'lucide-react';
+import { Clock, Calendar, CheckCircle2, ChevronRight, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
 import ApprovalProgressTimeline from '../components/ui/ApprovalProgressTimeline';
 import SlideDrawer from '../admin/components/ui/SlideDrawer';
-import RequestModal from '../components/dashboard/RequestModal';
+import SearchInput from '../admin/components/ui/SearchInput';
 
 interface RequestItem {
   id: string;
@@ -27,7 +27,9 @@ export default function LeaveTracking() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedReq, setSelectedReq] = useState<RequestItem | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   async function loadRequests() {
     try {
@@ -67,40 +69,40 @@ export default function LeaveTracking() {
     return () => { window.removeEventListener('leave-request-submitted', handleRefresh); };
   }, []);
 
+  const filteredRequests = requests
+    .filter((r) => (r.leaveTypeName || '').toLowerCase().includes(search.toLowerCase()))
+    .filter((r) => !dateFrom || r.endDate >= dateFrom)
+    .filter((r) => !dateTo || r.startDate <= dateTo)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   return (
     <div className="space-y-6">
-      {/* Request Modal */}
-      <RequestModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
-
-      {/* Page Header */}
-      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-            <FileCheck className="text-violet-600 dark:text-violet-400" size={24} />
-            Approval Progress Tracking
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Track real-time multi-level approval progress for all your submitted leave requests
-          </p>
+      {/* Search & Date Range Filter Bar */}
+      {requests.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-4 border border-slate-100 dark:border-slate-700/80 shadow-sm flex flex-wrap gap-3">
+          <div className="flex-1 min-w-48">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search leave type (e.g. Annual Leave)..." />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-3 py-2.5 text-sm bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-sm"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-3 py-2.5 text-sm bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-sm"
+            />
+          </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => void loadRequests()}
-            className="p-2.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-2xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 text-xs font-bold"
-          >
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            <span>Refresh</span>
-          </button>
-
-          <button
-            onClick={() => setModalOpen(true)}
-            className="px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-extrabold transition-all shadow-sm flex items-center gap-2"
-          >
-            <span>+ Request Leave</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Loading State */}
       {loading && requests.length === 0 ? (
@@ -115,12 +117,20 @@ export default function LeaveTracking() {
           <CheckCircle2 className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={48} />
           <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-200">No Submitted Requests</h3>
           <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-            You currently have no submitted leave requests. Click "+ Request Leave" to submit a request and track its multi-level approval stages in real time.
+            You currently have no submitted leave requests yet.
+          </p>
+        </div>
+      ) : filteredRequests.length === 0 ? (
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-12 border border-slate-100 dark:border-slate-700/80 shadow-sm text-center">
+          <CheckCircle2 className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={48} />
+          <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-200">No Matching Requests</h3>
+          <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+            No leave requests match "{search}". Try a different search term.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6">
-          {requests.map((req) => {
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {filteredRequests.map((req) => {
             const isPending = req.status === 'PENDING';
             const isApproved = req.status === 'APPROVED';
             const isRejected = req.status === 'REJECTED';

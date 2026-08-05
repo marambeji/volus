@@ -51,6 +51,23 @@ function workflowDisplayLabel(w: ApprovalConfiguration): string {
   return w.name;
 }
 
+// Policies only bind to a single quick approver-type shortcut, not a full
+// custom multi-level chain (those are configured per-employee on the
+// Approval Levels page instead). Collapse the raw workflow list down to one
+// entry per approver type, in a fixed order, so duplicates and multi-step
+// chains like "2level of approval" don't clutter the Add/Edit Policy picker.
+const APPROVER_TYPE_ORDER = ['manager', 'manager_manager', 'hr', 'specific_employee'];
+
+function getCanonicalWorkflows(all: ApprovalConfiguration[]): ApprovalConfiguration[] {
+  const byType: Record<string, ApprovalConfiguration> = {};
+  for (const w of all) {
+    if (w.levels.length !== 1) continue;
+    const type = w.levels[0]?.type as string;
+    if (APPROVER_TYPE_LABELS[type] && !byType[type]) byType[type] = w;
+  }
+  return APPROVER_TYPE_ORDER.map((t) => byType[t]).filter((w): w is ApprovalConfiguration => !!w);
+}
+
 const defaultQuotaForType = (typeKey: string, typeId?: string): LeaveQuota => {
   const keyLower = typeKey.toLowerCase();
   const isAccruedDefault = keyLower === 'annual' || keyLower === 'compensation' || keyLower === 'overtime';
@@ -180,6 +197,14 @@ export default function LeavePolicies() {
   const selectedWorkflow = workflows.find((w) => w.id === approvalWorkflow);
   const showSpecificPersonFields = !!selectedWorkflow && isSpecificPersonWorkflow(selectedWorkflow);
 
+  const canonicalWorkflows = getCanonicalWorkflows(workflows);
+  // If a policy was saved against a workflow outside the 4 canonical shortcuts
+  // (e.g. a legacy custom chain), keep it selectable so its assignment stays visible.
+  const workflowOptions =
+    selectedWorkflow && !canonicalWorkflows.some((w) => w.id === selectedWorkflow.id)
+      ? [...canonicalWorkflows, selectedWorkflow]
+      : canonicalWorkflows;
+
   // Departments aren't a separate backend entity. Offer the full canonical
   // list (so a department can be picked even before anyone's assigned to it
   // yet) plus any other department name actually in use on real employee
@@ -234,7 +259,7 @@ export default function LeavePolicies() {
 
   function openAdd() {
     const firstC = countries[0];
-    const firstWf = workflows[0];
+    const firstWf = canonicalWorkflows[0] || workflows[0];
     setPolicyName('');
     setCountryCode(firstC?.code || 'LB');
     setCountryName(firstC?.name || 'Lebanon');
@@ -762,7 +787,7 @@ export default function LeavePolicies() {
                       onChange={(e) => handleWorkflowChange(e.target.value)}
                       className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                     >
-                      {workflows.map((w) => (
+                      {workflowOptions.map((w) => (
                         <option key={w.id} value={w.id}>
                           {workflowDisplayLabel(w)}
                         </option>

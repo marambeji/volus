@@ -16,6 +16,7 @@ import { EmployeesModule } from './modules/employees/employees.module';
 import { LeaveBalancesModule } from './modules/leave-balances/leave-balances.module';
 import { LeaveRequestsModule } from './modules/leave-requests/leave-requests.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 import * as path from 'path';
 
@@ -43,6 +44,7 @@ import * as path from 'path';
     LeaveBalancesModule,
     LeaveRequestsModule,
     AuditLogsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

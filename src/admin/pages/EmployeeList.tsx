@@ -195,7 +195,7 @@ export default function EmployeeList() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div className="flex-1 min-w-48"><SearchInput value={search} onChange={setSearch} placeholder="Search name, email, position..." /></div>
-        <SelectFilter label="Department" value={filterDept}    onChange={setFilterDept}    options={departments.map(d => ({ label: d, value: d }))} />
+        <SelectFilter label="Department" value={filterDept}    onChange={setFilterDept}    options={departmentOptions.map(d => ({ label: d, value: d }))} />
         <SelectFilter label="Country"    value={filterCountry} onChange={setFilterCountry} options={countries.map(c => ({ label: c, value: c }))} />
         <SelectFilter label="Status"     value={filterStatus}  onChange={setFilterStatus}  options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }, { label: 'On Leave', value: 'on_leave' }, { label: 'Archived', value: 'archived' }]} />
       </div>
