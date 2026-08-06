@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, AlertCircle, Check, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, AlertCircle, Check, RefreshCw, Calendar, Globe2, RotateCcw, Sun } from 'lucide-react';
 import SearchInput from '../components/ui/SearchInput';
-import { SelectFilter } from '../components/ui/SelectFilter';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import { getCountries } from '../../services/countriesApi';
@@ -22,6 +21,27 @@ const emptyForm = (defaultCountryId = '') => ({
   recurring: true,
 });
 
+const MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** Unified violet/indigo palette — consistent with the app design system */
+const MONTH_COLORS = [
+  'from-violet-500 to-indigo-600',   // Jan
+  'from-indigo-500 to-violet-600',   // Feb
+  'from-violet-600 to-indigo-700',   // Mar
+  'from-indigo-600 to-violet-700',   // Apr
+  'from-violet-500 to-purple-600',   // May
+  'from-purple-500 to-violet-600',   // Jun
+  'from-indigo-600 to-violet-700',   // Jul
+  'from-violet-600 to-indigo-700',   // Aug
+  'from-violet-500 to-indigo-600',   // Sep
+  'from-indigo-500 to-violet-600',   // Oct
+  'from-violet-600 to-purple-700',   // Nov
+  'from-indigo-600 to-violet-700',   // Dec
+];
+
 export default function PublicHolidays() {
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [holidays, setHolidays] = useState<FrontendHoliday[]>([]);
@@ -33,12 +53,12 @@ export default function PublicHolidays() {
   const [filterCountry, setFilterCountry] = useState('');
   const [filterYear, setFilterYear] = useState('');
 
-  // Drawer/Modal States
+  // Drawer / Modal
   const [formOpen, setFormOpen] = useState(false);
   const [editHolidayItem, setEditHolidayItem] = useState<FrontendHoliday | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // Form State
+  // Form
   const [form, setForm] = useState(emptyForm());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
@@ -47,17 +67,16 @@ export default function PublicHolidays() {
     setLoading(true);
     setApiError(null);
     try {
-      let loadedCountries = countries;
-      if (loadedCountries.length === 0) {
-        loadedCountries = await getCountries(signal);
-        setCountries(loadedCountries);
+      let loaded = countries;
+      if (loaded.length === 0) {
+        loaded = await getCountries(signal);
+        setCountries(loaded);
       }
-      const loadedHolidays = await getHolidays(filterCountry, filterYear, loadedCountries, signal);
-      setHolidays(loadedHolidays);
+      const data = await getHolidays(filterCountry, filterYear, loaded, signal);
+      setHolidays(data);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
-      const msg = err instanceof Error ? err.message : 'Failed to load public holidays';
-      setApiError(msg);
+      setApiError(err instanceof Error ? err.message : 'Failed to load public holidays');
     } finally {
       setLoading(false);
     }
@@ -65,41 +84,30 @@ export default function PublicHolidays() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void (async () => {
-      setLoading(true);
-      setApiError(null);
-      try {
-        let loadedCountries = countries;
-        if (loadedCountries.length === 0) {
-          loadedCountries = await getCountries(controller.signal);
-          setCountries(loadedCountries);
-        }
-        const loadedHolidays = await getHolidays(filterCountry, filterYear, loadedCountries, controller.signal);
-        setHolidays(loadedHolidays);
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'AbortError') return;
-        const msg = err instanceof Error ? err.message : 'Failed to load public holidays';
-        setApiError(msg);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    void loadData(controller.signal);
     return () => controller.abort();
   }, [filterCountry, filterYear]);
 
-  const years = [
-    ...new Set(
-      holidays.map((h) => (h.date ? new Date(h.date).getFullYear().toString() : '2026'))
-    ),
-  ].sort();
+  // Year options derived from data
+  const years = [...new Set(
+    holidays.map(h => h.date ? new Date(h.date).getFullYear().toString() : '2026')
+  )].sort();
 
   const filtered = holidays
-    .filter((h) => h.name.toLowerCase().includes(search.toLowerCase()))
+    .filter(h =>
+      h.name.toLowerCase().includes(search.toLowerCase()) &&
+      (!filterCountry || h.countryId === filterCountry)
+    )
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  // Stats
+  const recurringCount  = filtered.filter(h => h.recurring).length;
+  const onceCount       = filtered.filter(h => !h.recurring).length;
+  const countryCount    = new Set(filtered.map(h => h.country)).size;
+  const upcoming        = filtered.filter(h => new Date(h.date) >= new Date()).length;
+
   function openAdd() {
-    const defaultCountry = countries[0]?.id || '';
-    setForm(emptyForm(defaultCountry));
+    setForm(emptyForm(countries[0]?.id || ''));
     setEditHolidayItem(null);
     setErrors({});
     setFormOpen(true);
@@ -107,9 +115,9 @@ export default function PublicHolidays() {
 
   function openEdit(h: FrontendHoliday) {
     setForm({
-      name: h.name,
-      date: h.date,
-      countryId: h.countryId || countries.find((c) => c.name === h.country)?.id || '',
+      name:      h.name,
+      date:      h.date,
+      countryId: h.countryId || countries.find(c => c.name === h.country)?.id || '',
       recurring: h.recurring,
     });
     setEditHolidayItem(h);
@@ -118,19 +126,17 @@ export default function PublicHolidays() {
   }
 
   function validate(): boolean {
-    const newErrors: Record<string, string> = {};
-    if (!form.name.trim()) newErrors.name = 'Holiday name is required';
-    if (!form.date) newErrors.date = 'Date is required';
-    if (!form.countryId) newErrors.countryId = 'Country selection is required';
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const e: Record<string, string> = {};
+    if (!form.name.trim())   e.name      = 'Holiday name is required';
+    if (!form.date)          e.date      = 'Date is required';
+    if (!form.countryId)     e.countryId = 'Country selection is required';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(ev: React.FormEvent) {
+    ev.preventDefault();
     if (!validate()) return;
-
     setSaving(true);
     try {
       if (editHolidayItem) {
@@ -145,14 +151,10 @@ export default function PublicHolidays() {
       await loadData();
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        const valMsgs = err.validationMessages;
-        setErrors((prev) => ({
-          ...prev,
-          form: valMsgs.length > 0 ? valMsgs.join(' | ') : err.message,
-        }));
+        const msgs = err.validationMessages;
+        setErrors(prev => ({ ...prev, form: msgs.length > 0 ? msgs.join(' | ') : err.message }));
       } else {
-        const msg = err instanceof Error ? err.message : 'Save failed';
-        setErrors((prev) => ({ ...prev, form: msg }));
+        setErrors(prev => ({ ...prev, form: err instanceof Error ? err.message : 'Save failed' }));
       }
     } finally {
       setSaving(false);
@@ -169,39 +171,61 @@ export default function PublicHolidays() {
       setDeleteId(null);
       await loadData();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Delete failed';
-      alert(msg);
+      alert(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-6 relative">
-      {/* Toast alert */}
+    <div className="max-w-5xl mx-auto flex flex-col gap-6 relative">
+
+      {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-300 rounded-xl shadow-lg transition-all">
-          <Check size={16} />
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl shadow-lg">
+          <Check size={16} className="text-emerald-500" />
           <span className="text-xs font-semibold">{toast}</span>
         </div>
       )}
 
-      {/* Header */}
+      {/* ── Header ────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Public Holidays</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Public Holidays</h1>
+          </div>
           <p className="text-slate-400 text-sm mt-1">Manage non-working days by country</p>
         </div>
         <button
           onClick={openAdd}
           disabled={Boolean(apiError) || loading}
-          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors cursor-pointer"
+          className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-400 text-white font-bold px-5 py-2.5 rounded-xl text-sm shadow-lg transition-all cursor-pointer"
         >
           <Plus size={16} /> Add Holiday
         </button>
       </div>
 
-      {/* Backend error banner */}
+      {/* ── Stats Row ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Holidays',    value: filtered.length, icon: <Calendar size={18} />,  color: 'text-violet-600 bg-violet-50 dark:bg-violet-950/30' },
+          { label: 'Upcoming',          value: upcoming,        icon: <Sun size={18} />,        color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
+          { label: 'Countries',         value: countryCount,    icon: <Globe2 size={18} />,     color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30' },
+          { label: 'Recurring / Once',  value: `${recurringCount} / ${onceCount}`, icon: <RotateCcw size={18} />, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
+        ].map(s => (
+          <div key={s.label} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 flex items-center gap-3 shadow-xs">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${s.color}`}>
+              {s.icon}
+            </div>
+            <div>
+              <div className="text-xl font-black text-slate-800 dark:text-white">{s.value}</div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Error Banner ──────────────────────────────────────────────── */}
       {apiError && (
         <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -210,113 +234,148 @@ export default function PublicHolidays() {
           </div>
           <button
             onClick={() => void loadData()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-800/40 text-red-800 dark:text-red-200 rounded-lg text-xs font-bold hover:bg-red-200 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-800/40 text-red-800 dark:text-red-200 rounded-lg text-xs font-bold hover:bg-red-200 transition-colors cursor-pointer"
           >
             <RefreshCw size={13} /> Retry
           </button>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      {/* ── Filters ───────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-3 flex flex-wrap items-center gap-3 shadow-xs">
         <div className="flex-1 min-w-48">
           <SearchInput value={search} onChange={setSearch} placeholder="Search holiday..." />
         </div>
-        <SelectFilter
-          label="Country"
+        <select
           value={filterCountry}
-          onChange={setFilterCountry}
-          options={countries.map((c) => ({ label: `${c.flag} ${c.name}`, value: c.id }))}
-        />
-        <SelectFilter
-          label="Year"
+          onChange={e => setFilterCountry(e.target.value)}
+          className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-violet-400 cursor-pointer"
+        >
+          <option value="">🌍 All Countries</option>
+          {countries.map(c => (
+            <option key={c.id} value={c.id}>{c.flag} {c.name}</option>
+          ))}
+        </select>
+        <select
           value={filterYear}
-          onChange={setFilterYear}
-          options={years.map((y) => ({ label: y, value: y }))}
-        />
+          onChange={e => setFilterYear(e.target.value)}
+          className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-violet-400 cursor-pointer"
+        >
+          <option value="">📅 All Years</option>
+          {years.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        {(search || filterCountry || filterYear) && (
+          <button
+            onClick={() => { setSearch(''); setFilterCountry(''); setFilterYear(''); }}
+            className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            title="Reset Filters"
+          >
+            <RotateCcw size={14} />
+          </button>
+        )}
       </div>
 
-      {/* Loading state */}
+      {/* ── Loading ───────────────────────────────────────────────────── */}
       {loading && !apiError && (
-        <div className="py-16 text-center text-slate-400 text-sm flex justify-center items-center gap-2">
-          <RefreshCw size={16} className="animate-spin text-violet-600" /> Loading public holidays...
+        <div className="py-20 text-center text-slate-400 text-sm flex justify-center items-center gap-2">
+          <RefreshCw size={16} className="animate-spin text-violet-600" /> Loading public holidays…
         </div>
       )}
 
-      {/* Table */}
+      {/* ── Holiday Card Grid ─────────────────────────────────────────── */}
       {!loading && !apiError && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-700 text-[11px] font-bold text-slate-400 uppercase tracking-wide bg-slate-50 dark:bg-slate-800/50">
-                <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Holiday Name</th>
-                <th className="py-3 px-4">Country</th>
-                <th className="py-3 px-4 text-center">Recurring</th>
-                <th className="py-3 px-4 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400 text-sm">
-                    No holidays found
-                  </td>
-                </tr>
-              )}
-              {filtered.map((h) => (
-                <tr key={h.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors">
-                  <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-200">
-                    {new Date(h.date).toLocaleDateString('en-GB', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </td>
-                  <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-white">{h.name}</td>
-                  <td className="py-3.5 px-4">
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-lg">{h.flag}</span>{' '}
-                      <span className="text-slate-600 dark:text-slate-300">{h.country}</span>
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-center">
-                    {h.recurring ? (
-                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        Yearly
-                      </span>
-                    ) : (
-                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        Once
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 text-center">
-                    <div className="flex justify-center gap-1.5">
-                      <button
-                        onClick={() => openEdit(h)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors cursor-pointer"
-                        title="Edit"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(h.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                        title="Delete"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+        <>
+          {filtered.length === 0 ? (
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-16 text-center shadow-xs">
+              <div className="text-4xl mb-3">🎉</div>
+              <h3 className="text-base font-extrabold text-slate-700 dark:text-slate-200">No Holidays Found</h3>
+              <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or add a new holiday.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map(h => {
+                const d = new Date(h.date);
+                const isValid = !isNaN(d.getTime());
+                const monthIdx = isValid ? d.getMonth() : 0;
+                const day = isValid ? d.getDate() : '—';
+                const month = isValid ? MONTH_NAMES[monthIdx] : '—';
+                const year = isValid ? d.getFullYear() : '—';
+                const gradientClass = MONTH_COLORS[monthIdx];
+                const isPast = isValid && d < new Date(new Date().setHours(0, 0, 0, 0));
+
+                return (
+                  <div
+                    key={h.id}
+                    className={`bg-white dark:bg-slate-800 rounded-2xl border shadow-xs overflow-hidden flex flex-col transition-all hover:shadow-md hover:-translate-y-0.5 ${
+                      isPast
+                        ? 'border-slate-100 dark:border-slate-700 opacity-60'
+                        : 'border-slate-100 dark:border-slate-700 hover:border-violet-200 dark:hover:border-violet-900'
+                    }`}
+                  >
+                    {/* Top accent bar with date */}
+                    <div className={`bg-gradient-to-r ${gradientClass} px-5 py-4 flex items-center justify-between`}>
+                      <div className="flex items-baseline gap-2 text-white">
+                        <span className="text-4xl font-black leading-none">{day}</span>
+                        <div>
+                          <div className="text-sm font-extrabold uppercase tracking-wider">{month}</div>
+                          <div className="text-xs font-bold opacity-80">{year}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl">{h.flag}</span>
+                        {isPast && (
+                          <div className="text-[9px] font-extrabold uppercase text-white/70 mt-0.5">PAST</div>
+                        )}
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+                    {/* Card body */}
+                    <div className="p-4 flex flex-col gap-3 flex-1">
+                      <div>
+                        <h3 className="font-extrabold text-slate-800 dark:text-white text-sm leading-snug">{h.name}</h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{h.country}</p>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-100 dark:border-slate-700">
+                        {/* Recurring badge */}
+                        {h.recurring ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-black uppercase tracking-wider">
+                            <RotateCcw size={9} /> Yearly
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600 text-[10px] font-black uppercase tracking-wider">
+                            Once
+                          </span>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openEdit(h)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors cursor-pointer"
+                            title="Edit"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteId(h.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Form Drawer */}
+      {/* ── Add / Edit Drawer ─────────────────────────────────────────── */}
       <SlideDrawer
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
@@ -338,7 +397,7 @@ export default function PublicHolidays() {
               type="text"
               required
               value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
               placeholder="e.g. Christmas Day"
               className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
                 errors.name ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
@@ -360,7 +419,7 @@ export default function PublicHolidays() {
                 type="date"
                 required
                 value={form.date}
-                onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
+                onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
                 className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
                   errors.date ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
                 } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
@@ -378,13 +437,11 @@ export default function PublicHolidays() {
               </label>
               <select
                 value={form.countryId}
-                onChange={(e) => setForm((p) => ({ ...p, countryId: e.target.value }))}
+                onChange={e => setForm(p => ({ ...p, countryId: e.target.value }))}
                 className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
               >
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} {c.flag}
-                  </option>
+                {countries.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} {c.flag}</option>
                 ))}
               </select>
             </div>
@@ -398,7 +455,7 @@ export default function PublicHolidays() {
             <input
               type="checkbox"
               checked={form.recurring}
-              onChange={(e) => setForm((p) => ({ ...p, recurring: e.target.checked }))}
+              onChange={e => setForm(p => ({ ...p, recurring: e.target.checked }))}
               className="w-4 h-4 text-violet-600 border-slate-300 rounded focus:ring-violet-500 cursor-pointer"
             />
           </div>
@@ -407,14 +464,14 @@ export default function PublicHolidays() {
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              className="flex-1 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer"
+              className="flex-1 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 cursor-pointer transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 py-2.5 text-sm font-bold text-white bg-violet-600 rounded-xl hover:bg-violet-700 disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2"
+              className="flex-1 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 rounded-xl disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2 shadow-lg transition-all"
             >
               {saving && <RefreshCw size={14} className="animate-spin" />}
               {editHolidayItem ? 'Save Changes' : 'Add Holiday'}
@@ -423,7 +480,7 @@ export default function PublicHolidays() {
         </form>
       </SlideDrawer>
 
-      {/* Delete Confirmation */}
+      {/* ── Delete Confirmation ───────────────────────────────────────── */}
       <ConfirmModal
         isOpen={deleteId !== null}
         onClose={() => setDeleteId(null)}

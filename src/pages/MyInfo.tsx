@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Mail, Phone, MapPin, CalendarDays, ArrowRightLeft, History, RefreshCcw, XCircle, Eye } from 'lucide-react';
+import { Mail, Phone, MapPin, CalendarDays, ArrowRightLeft, History, XCircle, Eye } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
 import Badge from '../components/ui/Badge';
 import SlideDrawer from '../admin/components/ui/SlideDrawer';
+import ConfirmModal from '../admin/components/ui/ConfirmModal';
 import ApprovalProgressTimeline from '../components/ui/ApprovalProgressTimeline';
 import { leaveBalancesList, leaveLedgerList, leaveRequestsList, leaveTypesList } from '../data/mockData';
 import { apiFetch } from '../services/apiClient';
+
+function hasPassed(endDate: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(endDate) < today;
+}
 
 export default function MyInfo() {
   const [selectedLeaveType, setSelectedLeaveType] = useState('annual');
@@ -13,17 +20,31 @@ export default function MyInfo() {
   const [tableMode, setTableMode] = useState<'requests' | 'ledger'>('requests');
   const [requests, setRequests] = useState<any[]>(leaveRequestsList);
   const [balances, setBalances] = useState<any[]>(leaveBalancesList);
-  const [ledger] = useState(leaveLedgerList);
+  const [ledger, setLedger] = useState<any[]>(leaveLedgerList);
   const [profile, setProfile] = useState<any>(null);
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<any | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [realRequests, realBalancesData, meData] = await Promise.all([
+        let currentUserId: string | undefined;
+        try {
+          const stored = localStorage.getItem('currentUser');
+          if (stored) currentUserId = JSON.parse(stored)?.id;
+        } catch {
+          // ignore malformed localStorage
+        }
+
+        const [realRequests, realBalancesData, meData, realLedgerData] = await Promise.all([
           apiFetch<any[]>('/leave-requests/my-requests').catch(() => null),
           apiFetch<any>('/employees/me/leave-balances').catch(() => null),
           apiFetch<any>('/employees/me').catch(() => null),
+          currentUserId
+            ? apiFetch<{ data: any[] }>(`/leave-balances/ledger?employeeId=${currentUserId}&limit=50`).catch(() => null)
+            : Promise.resolve(null),
         ]);
 
         if (meData) {
@@ -48,12 +69,32 @@ export default function MyInfo() {
             currentStepOrder: r.currentStepOrder,
             totalRequiredSteps: r.totalRequiredSteps,
             currentApproverLabel: r.currentApproverLabel,
+            updatedAt: r.updatedAt,
           }));
           setRequests(mapped);
         }
 
+        let resolvedBalances = balances;
         if (realBalancesData && realBalancesData.balances && realBalancesData.balances.length > 0) {
-          setBalances(realBalancesData.balances);
+          resolvedBalances = realBalancesData.balances;
+          setBalances(resolvedBalances);
+        }
+
+        if (realLedgerData?.data) {
+          const typeIdToCode: Record<string, string> = {};
+          resolvedBalances.forEach((b: any) => {
+            if (b.leaveTypeId) typeIdToCode[b.leaveTypeId] = b.code || b.leaveType || b.leaveTypeId;
+          });
+
+          const mappedLedger = realLedgerData.data.map((l: any) => ({
+            date: new Date(l.createdAt).toLocaleDateString('en-GB'),
+            description: l.description,
+            leaveType: typeIdToCode[l.leaveTypeId] || l.leaveTypeId,
+            used: l.usedDays || 0,
+            earned: l.earnedDays || 0,
+            runningBalance: l.balanceAfter,
+          }));
+          setLedger(mappedLedger);
         }
       } catch (err) {
         console.error('Failed to load real MyInfo data:', err);
@@ -64,6 +105,12 @@ export default function MyInfo() {
     window.addEventListener('leave-request-submitted', handleRefetch);
     return () => { window.removeEventListener('leave-request-submitted', handleRefetch); };
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Build display values from profile (real) or fallback
   const displayName     = profile?.fullName     ?? '—';
@@ -76,16 +123,20 @@ export default function MyInfo() {
     ? new Date(profile.hireDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : '—';
 
-  function handleRecall(requestId: number) {
-    setRequests(
-      requests.map((r) => (r.id === requestId ? { ...r, status: 'pending' as const } : r))
-    );
-  }
-
-  function handleCancel(requestId: number) {
-    setRequests(
-      requests.map((r) => (r.id === requestId ? { ...r, status: 'declined' as const } : r))
-    );
+  async function handleConfirmCancel() {
+    if (!cancelTarget || cancellingId) return;
+    const target = cancelTarget;
+    setCancellingId(target.id);
+    try {
+      await apiFetch(`/leave-requests/${target.id}/cancel`, { method: 'PATCH' });
+      setToast({ message: 'Leave request cancelled successfully.', type: 'success' });
+      window.dispatchEvent(new Event('leave-request-submitted'));
+    } catch (err: any) {
+      setToast({ message: err?.message || 'Failed to cancel leave request.', type: 'error' });
+    } finally {
+      setCancellingId(null);
+      setCancelTarget(null);
+    }
   }
 
   return (
@@ -326,12 +377,18 @@ export default function MyInfo() {
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                            req.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                            req.status === 'pending'  ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                            req.status === 'approved'  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                            req.status === 'pending'   ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                            req.status === 'cancelled' ? 'bg-slate-100 text-slate-500 border border-slate-200' :
                             'bg-red-50 text-red-700 border border-red-100'
                           }`}>
                             {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
                           </span>
+                          {req.status === 'cancelled' && req.updatedAt && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Cancelled {new Date(req.updatedAt).toLocaleDateString('en-GB')}
+                            </p>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center font-bold text-slate-700">
                           {req.totalDays}
@@ -345,20 +402,16 @@ export default function MyInfo() {
                             >
                               <Eye size={14} />
                             </button>
-                            <button
-                              onClick={() => handleRecall(req.id)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                              title="Recall / Reset to Pending"
-                            >
-                              <RefreshCcw size={14} />
-                            </button>
-                            <button
-                              onClick={() => handleCancel(req.id)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                              title="Cancel request"
-                            >
-                              <XCircle size={14} />
-                            </button>
+                            {req.status === 'pending' && !hasPassed(req.endDate) && (
+                              <button
+                                onClick={() => setCancelTarget(req)}
+                                disabled={cancellingId === req.id}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                title="Cancel request"
+                              >
+                                <XCircle size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -445,6 +498,25 @@ export default function MyInfo() {
           )}
         </SlideDrawer>
       </div>
+
+      {/* Toast Alert Banner */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl border shadow-lg transition-all duration-300 ${toast.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'}`}>
+          <span className="text-xs font-semibold">{toast.message}</span>
+        </div>
+      )}
+
+      {/* Cancel Confirmation */}
+      <ConfirmModal
+        isOpen={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={handleConfirmCancel}
+        title="Cancel Leave Request"
+        message="Are you sure you want to cancel this leave request?"
+        confirmLabel="Cancel Request"
+        danger
+        confirming={!!cancelTarget && cancellingId === cancelTarget.id}
+      />
     </div>
   );
 }

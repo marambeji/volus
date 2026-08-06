@@ -26,7 +26,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
   }, [darkMode]);
 
   const currentUser = JSON.parse(
-    localStorage.getItem('currentUser') ||
+    localStorage.getItem('currentUser') || 
     '{"name":"Gabriel Habre","email":"gabriel.habre@novelus.com","role":"employee","avatar":"GH"}'
   );
 
@@ -39,7 +39,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
 
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-20 shadow-xs">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-20 shadow-xs print:hidden">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setMobileOpen(true)}

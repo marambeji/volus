@@ -7,6 +7,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import HistoryDrawer from '../components/HistoryDrawer';
 import { hrGetLeaveRequests, hrApproveLeaveRequest, hrRejectLeaveRequest } from '../../services/adminApi';
+import Pagination from '../../components/ui/Pagination';
 
 const leaveTypeOptions = [
   { label: 'Annual',      value: 'annual' },
@@ -31,6 +32,14 @@ export default function LeaveRequests() {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterStatus, filterType, filterDept, filterCountry, filterStartDate, filterEndDate]);
+
   // Modals & Selection
   const [selected, setSelected] = useState<any | null>(null);
   const [rejectId, setRejectId] = useState<number | string | null>(null);
@@ -103,6 +112,7 @@ export default function LeaveRequests() {
       await hrApproveLeaveRequest(id);
       setToast('Leave request fully approved');
       loadRequests();
+      window.dispatchEvent(new Event('leave-request-submitted'));
     } catch (e: any) {
       setToast(e.message || 'Failed to approve');
     }
@@ -115,6 +125,7 @@ export default function LeaveRequests() {
       setToast('Leave request declined');
       setRejectId(null);
       loadRequests();
+      window.dispatchEvent(new Event('leave-request-submitted'));
     } catch (e: any) {
       setToast(e.message || 'Failed to reject');
     }
@@ -180,7 +191,7 @@ export default function LeaveRequests() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={9} className="py-16 text-center text-slate-400 text-sm">No requests found</td></tr>
               ) : (
-                filtered.map(req => {
+                filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(req => {
                   return (
                     <tr key={req.requestId} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors cursor-pointer" onClick={() => setSelected(req)}>
                       <td className="py-3.5 px-4">
@@ -221,6 +232,15 @@ export default function LeaveRequests() {
             </tbody>
           </table>
         </div>
+        {filtered.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
 
       {/* Detail Drawer */}

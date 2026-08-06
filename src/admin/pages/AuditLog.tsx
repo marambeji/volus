@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import SearchInput from '../components/ui/SearchInput';
 import { SelectFilter } from '../components/ui/SelectFilter';
 import { apiFetch } from '../../services/apiClient';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, RotateCcw } from 'lucide-react';
+import Pagination from '../../components/ui/Pagination';
+
 
 interface AuditLogRecord {
   id: string;
@@ -25,6 +27,13 @@ export default function AuditLog() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterAction, setFilterAction] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+
+  // Reset to page 1 on filter change
+  useEffect(() => { setCurrentPage(1); }, [search, filterAction]);
 
   const loadLogs = async (signal?: AbortSignal) => {
     setLoading(true);
@@ -223,6 +232,9 @@ export default function AuditLog() {
     }
   };
 
+  // Pagination calculations
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -230,6 +242,13 @@ export default function AuditLog() {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Audit Log</h1>
           <p className="text-slate-400 text-sm mt-1">Track all system actions and modifications in real time</p>
         </div>
+        <button
+          onClick={() => void loadLogs()}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-600 rounded-xl text-sm shadow-sm transition-all cursor-pointer disabled:opacity-40"
+        >
+          <RotateCcw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -269,7 +288,7 @@ export default function AuditLog() {
                   </td>
                 </tr>
               )}
-              {filtered.map((log) => (
+              {paginated.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/30">
                   <td className="py-3.5 px-4 text-xs text-slate-500 whitespace-nowrap">
                     {new Date(log.timestamp).toLocaleString('en-GB')}
@@ -304,6 +323,15 @@ export default function AuditLog() {
               ))}
             </tbody>
           </table>
+
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+            pageSizeOptions={[15, 30, 50]}
+          />
         </div>
       )}
     </div>

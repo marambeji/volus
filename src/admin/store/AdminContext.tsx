@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { AdminState, AuditAction, AdminEmployee, CountryPolicy, AuditLogEntry, Department, ApprovalConfiguration } from '../types/adminTypes';
 import type { LeaveTypeKey } from '../../types';
 import {
-  adminEmployeesList, adminLeaveRequests, adminLeaveBalances, adminLeaveLedger,
+  adminLeaveLedger,
   countriesPolicies, adminHolidays, adminDepartments, adminAuditLog, adminNotifications
 } from '../data/adminMockData';
 import { getEmployees } from '../../services/employeesApi';
@@ -41,14 +41,9 @@ const mockApprovalLevels: ApprovalConfiguration[] = [
 
 // ─── Initial State ────────────────────────────────────────────────────────────
 const initialState: AdminState = {
-  employees: adminEmployeesList.map(e => ({
-    ...e,
-    role: e.id === 10 ? 'HR Admin' : e.id === 1 || e.id === 2 || e.id === 3 ? 'Manager' : 'Employee',
-    division: e.country === 'Lebanon' ? 'Levant' : e.country === 'France' ? 'Europe' : 'International',
-    approvalLevelId: (typeof e.id === 'number' ? e.id : String(e.id).charCodeAt(0)) % 3 === 0 ? 'app-2' : (typeof e.id === 'number' ? e.id : String(e.id).charCodeAt(0)) % 3 === 1 ? 'app-1' : 'app-3'
-  })),
-  leaveRequests: adminLeaveRequests,
-  leaveBalances: adminLeaveBalances,
+  employees: [],
+  leaveRequests: [],
+  leaveBalances: [],
   leaveLedger: adminLeaveLedger,
   policies: countriesPolicies,
   holidays: adminHolidays,

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, CalendarDays, FileText, Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2, Upload } from 'lucide-react';
-import { getMyLeaveBalances, submitLeaveRequest } from '../../services/employeesApi';
+import { getMyLeaveBalances, submitLeaveRequest, getMyLeaveRequests } from '../../services/employeesApi';
+import { getLeaveTypes } from '../../services/leaveTypesApi';
+import { getHolidays } from '../../services/holidaysApi';
 
 interface RequestModalProps {
   isOpen: boolean;
@@ -26,18 +28,70 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
   // Calendar shown month/year state
   const [calDate, setCalDate] = useState(new Date());
 
-  // Fetch Configuration
+  // Public holidays states
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [selectedHolidayIds, setSelectedHolidayIds] = useState<string[]>([]);
+
+  // Fetch holidays for the current employee's country
+  useEffect(() => {
+    if (config?.countryId) {
+      getHolidays(config.countryId)
+        .then((data) => {
+          setHolidays(data);
+        })
+        .catch(() => {});
+    } else {
+      setHolidays([]);
+      setSelectedHolidayIds([]);
+    }
+  }, [config?.countryId]);
+
+  const [myRequests, setMyRequests] = useState<any[]>([]);
+
+  // Fetch Configuration & Leave Types & My Requests
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
       setErrorMsg('');
       const fetchConfig = async () => {
         try {
-          const conf = await getMyLeaveBalances();
-          setConfig(conf);
-          if (conf.balances && conf.balances.length > 0) {
-             const defaultType = conf.balances.find((t: any) => t.code === 'ANNUAL') || conf.balances[0];
-             setTypeId(defaultType.leaveTypeId);
+          const [conf, allLeaveTypes, existingRequests] = await Promise.all([
+            getMyLeaveBalances().catch(() => ({ balances: [] })),
+            getLeaveTypes().catch(() => []),
+            getMyLeaveRequests().catch(() => []),
+          ]);
+
+          setMyRequests(existingRequests || []);
+
+          const existingBalances = conf?.balances || [];
+          const balanceTypeIds = new Set(existingBalances.map((b: any) => b.leaveTypeId));
+
+          // Merge leave types that might not have active policy rules/balances calculated yet
+          const combinedBalances = [...existingBalances];
+          for (const lt of allLeaveTypes) {
+            if (!balanceTypeIds.has(lt.id)) {
+              combinedBalances.push({
+                leaveTypeId: lt.id,
+                code: lt.key.toUpperCase(),
+                name: lt.label,
+                availableBalance: 0,
+                usageYtd: 0,
+                trackingMode: lt.trackingMode,
+                allowsHalfDay: true,
+                requiresNote: false,
+                requiresDocument: false,
+                requiresPositiveBalance: false,
+                eligible: true,
+              });
+            }
+          }
+
+          const finalConfig = { ...(conf || {}), balances: combinedBalances };
+          setConfig(finalConfig);
+
+          if (combinedBalances.length > 0) {
+            const defaultType = combinedBalances.find((t: any) => t.code?.toUpperCase() === 'ANNUAL') || combinedBalances[0];
+            setTypeId(defaultType.leaveTypeId);
           }
         } catch (error: any) {
           setErrorMsg(error.message || 'Failed to load leave balances.');
@@ -53,6 +107,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
       setSubmitted(false);
       setCalDate(new Date());
       setConfig(null);
+      setSelectedHolidayIds([]);
     }
   }, [isOpen]);
 
@@ -103,7 +158,31 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
     setDailyAmounts(tempDaily);
   }, [startDate, endDate]);
 
-  const totalDays = Object.values(dailyAmounts).reduce((sum, val) => sum + val, 0);
+  // Real balances return a lowercase code (e.g. "public_holiday"); only the
+  // synthetic fallback entry above (for a leave type with no balance yet)
+  // uppercases it — compare case-insensitively so this works for both.
+  const isPublicHolidayType = selectedLeaveConfig?.code?.toUpperCase() === 'PUBLIC_HOLIDAY';
+  const totalDays = isPublicHolidayType
+    ? selectedHolidayIds.length
+    : Object.values(dailyAmounts).reduce((sum, val) => sum + val, 0);
+
+  // Helper to check proactive date overlap against active existing requests
+  const activeRequests = myRequests.filter(
+    (r: any) => r.status === 'PENDING' || r.status === 'APPROVED'
+  );
+
+  const getConflictingRequest = (start: string, end: string) => {
+    if (!start || !end) return null;
+    return activeRequests.find(
+      (r: any) => r.startDate <= end && r.endDate >= start
+    );
+  };
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  // Sorted public holidays (closest date first)
+  const sortedHolidays = [...holidays].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // Hard errors (block submission)
   let blockingError = '';
@@ -112,17 +191,57 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
   if (selectedLeaveConfig) {
     if (selectedLeaveConfig.eligible === false) {
       blockingError = selectedLeaveConfig.ineligibilityReasons.join(' ');
-    } else if (startDate && endDate) {
-      if (minRequestDays > 0 && totalDays < minRequestDays) {
-        blockingError = `Request must be at least ${minRequestDays} day(s).`;
-      } else if (maxRequestDays !== null && maxRequestDays !== undefined && totalDays > maxRequestDays) {
-        blockingError = `Request cannot exceed ${maxRequestDays} day(s).`;
-      } else if (maxConsecutiveDays !== null && maxConsecutiveDays !== undefined && totalDays > maxConsecutiveDays) {
-        blockingError = `Request cannot exceed ${maxConsecutiveDays} consecutive chargeable day(s).`;
-      } else if (trackingMode === 'AVAILABLE_BALANCE' && (availableBalance - totalDays) < 0) {
-        // Overdraft is allowed — warn but do not block
-        const deficit = Math.abs(availableBalance - totalDays);
-        overdraftWarning = `Your balance will go negative by ${deficit} day(s). The request will be submitted but your balance will be −${Math.abs(availableBalance - totalDays)}d.`;
+    } else if (isPublicHolidayType) {
+      if (selectedHolidayIds.length === 0) {
+        blockingError = 'Please select at least one public holiday.';
+      } else {
+        // Check if any selected holiday conflicts with existing active requests
+        for (const holidayId of selectedHolidayIds) {
+          const holiday = holidays.find((h) => h.id === holidayId);
+          if (holiday) {
+            const conflict = getConflictingRequest(holiday.date, holiday.date);
+            if (conflict) {
+              const fromStr = new Date(conflict.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+              const toStr = new Date(conflict.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+              const statusStr = (conflict.status || 'existing').toLowerCase();
+              blockingError = `Selected holiday (${holiday.name}) overlaps with an existing ${statusStr} request from ${fromStr} to ${toStr}.`;
+              break;
+            }
+          }
+        }
+      }
+      if (!blockingError) {
+        if (requiresNote && !reason.trim()) {
+          blockingError = `A note is required for this leave type.`;
+        } else if (requiresDocument) {
+          blockingError = `A supporting document is required for this leave type (Secure attachment service is missing).`;
+        }
+      }
+    } else {
+      if (startDate && startDate < todayStr) {
+        blockingError = 'Start date cannot be in the past.';
+      } else if (endDate && endDate < todayStr) {
+        blockingError = 'End date cannot be in the past.';
+      } else if (startDate && endDate && endDate < startDate) {
+        blockingError = 'End date cannot be before start date.';
+      } else if (startDate && endDate) {
+        const conflict = getConflictingRequest(startDate, endDate);
+        if (conflict) {
+          const fromStr = new Date(conflict.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+          const toStr = new Date(conflict.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+          const statusStr = (conflict.status || 'existing').toLowerCase();
+          blockingError = `You already have an ${statusStr} leave request from ${fromStr} to ${toStr}.`;
+        } else if (minRequestDays > 0 && totalDays < minRequestDays) {
+          blockingError = `Request must be at least ${minRequestDays} day(s).`;
+        } else if (maxRequestDays !== null && maxRequestDays !== undefined && totalDays > maxRequestDays) {
+          blockingError = `Request cannot exceed ${maxRequestDays} day(s).`;
+        } else if (maxConsecutiveDays !== null && maxConsecutiveDays !== undefined && totalDays > maxConsecutiveDays) {
+          blockingError = `Request cannot exceed ${maxConsecutiveDays} consecutive chargeable day(s).`;
+        } else if (trackingMode === 'AVAILABLE_BALANCE' && (availableBalance - totalDays) < 0) {
+          // Overdraft is allowed — warn but do not block
+          const deficit = Math.abs(availableBalance - totalDays);
+          overdraftWarning = `Your balance will go negative by ${deficit} day(s). The request will be submitted but your balance will be −${Math.abs(availableBalance - totalDays)}d.`;
+        }
       }
       if (!blockingError) {
         if (requiresNote && !reason.trim()) {
@@ -188,21 +307,48 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
     e.preventDefault();
     if (blockingError) return;
     
+    setLoading(true);
     try {
-      await submitLeaveRequest({
-        leaveTypeId: typeId,
-        startDate,
-        endDate,
-        durationDays: totalDays,
-        reason,
-      });
+      if (isPublicHolidayType) {
+        // Loop and submit a single day leave request for each selected holiday
+        for (const holidayId of selectedHolidayIds) {
+          const holiday = holidays.find(h => h.id === holidayId);
+          if (!holiday) continue;
+          await submitLeaveRequest({
+            leaveTypeId: typeId,
+            startDate: holiday.date,
+            endDate: holiday.date,
+            durationDays: 1,
+            reason: `Public Holiday: ${holiday.name}` + (reason ? ` - ${reason}` : ''),
+          });
+        }
+      } else {
+        await submitLeaveRequest({
+          leaveTypeId: typeId,
+          startDate,
+          endDate,
+          durationDays: totalDays,
+          reason,
+        });
+      }
       setSubmitted(true);
       window.dispatchEvent(new Event('leave-request-submitted'));
       setTimeout(() => {
         onClose();
       }, 2000);
     } catch (err: any) {
-      alert(err.message || 'Failed to submit request');
+      const details = err?.details || err?.response || {};
+      const conflicting = details.conflictingRequest;
+      if (conflicting && conflicting.fromDate && conflicting.toDate) {
+        const fromStr = new Date(conflicting.fromDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const toStr = new Date(conflicting.toDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const statusStr = (conflicting.status || 'existing').toLowerCase();
+        alert(`You already have an ${statusStr} leave request from ${fromStr} to ${toStr}.`);
+      } else {
+        alert(err?.message || 'You already have a leave request for this day or period.');
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -339,9 +485,12 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
                       <div className="grid grid-cols-7 gap-1 text-center">
                         {calCells.map((cell, idx) => {
                           const isSelected = startDate && endDate && cell.isCurrentMonth && cell.dateString >= startDate && cell.dateString <= endDate;
+                          const isPast = cell.isCurrentMonth && cell.dateString < todayStr;
                           let cellClass = "relative h-7 w-7 text-xs flex items-center justify-center rounded-lg font-bold transition-all ";
                           if (!cell.isCurrentMonth) {
                             cellClass += "text-slate-300 bg-transparent pointer-events-none ";
+                          } else if (isPast) {
+                            cellClass += "text-slate-400 bg-transparent opacity-40 cursor-not-allowed pointer-events-none ";
                           } else if (isSelected) {
                             cellClass += "bg-[#1b2559] text-white shadow-md shadow-blue-900/20";
                           } else {
@@ -398,77 +547,205 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">From Date *</label>
-                      <div className="relative">
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                          required
-                        />
-                        <CalendarDays size={16} className="absolute left-3 top-3 text-slate-400" />
+                  {isPublicHolidayType ? (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                          Select Public Holidays *
+                        </label>
+                        {sortedHolidays.length > 0 && (
+                          <div className="flex items-center gap-2 text-[10px] font-semibold">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedHolidayIds(sortedHolidays.map((h) => h.id))}
+                              className="text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
+                            >
+                              Select all
+                            </button>
+                            <span className="text-slate-300">·</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedHolidayIds([])}
+                              className="text-slate-400 hover:text-slate-600 hover:underline transition-colors cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                            {selectedHolidayIds.length > 0 && (
+                              <span className="ml-1 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                {selectedHolidayIds.length} selected
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {sortedHolidays.length === 0 ? (
+                        <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl text-center text-sm text-slate-400">
+                          No public holidays found for your country.
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          {/* Scrollable list panel */}
+                          <div
+                            className="flex flex-col gap-2 border border-slate-200/80 rounded-xl bg-slate-50/50 overflow-hidden"
+                            style={{ maxHeight: '260px' }}
+                          >
+                            <div
+                              className="flex flex-col gap-0 overflow-y-auto"
+                              style={{
+                                maxHeight: '260px',
+                                scrollbarWidth: 'thin',
+                                scrollbarColor: '#CBD5E1 transparent',
+                              }}
+                            >
+                              {sortedHolidays.map((holiday, idx) => {
+                                const isChecked = selectedHolidayIds.includes(holiday.id);
+                                const isLast = idx === sortedHolidays.length - 1;
+                                const hDate = new Date(holiday.date);
+                                const isThisMonth = hDate.getMonth() === calMonth && hDate.getFullYear() === calYear;
+                                return (
+                                  <label
+                                    key={holiday.id}
+                                    className={`flex items-center justify-between px-4 py-3 cursor-pointer select-none transition-colors ${
+                                      !isLast ? 'border-b border-slate-200/60' : ''
+                                    } ${
+                                      isChecked
+                                        ? 'bg-blue-50 hover:bg-blue-50/80'
+                                        : 'hover:bg-white'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          setSelectedHolidayIds((prev) =>
+                                            prev.includes(holiday.id)
+                                              ? prev.filter((id) => id !== holiday.id)
+                                              : [...prev, holiday.id]
+                                          );
+                                        }}
+                                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer flex-shrink-0"
+                                      />
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <p className={`text-sm font-semibold truncate ${isChecked ? 'text-blue-900' : 'text-slate-800'}`}>
+                                            {holiday.name}
+                                          </p>
+                                          {isThisMonth && (
+                                            <span className="flex-shrink-0 text-[9px] font-bold bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                                              This Month
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 mt-0.5">
+                                          {new Date(holiday.date).toLocaleDateString('en-GB', {
+                                            weekday: 'short',
+                                            day: 'numeric',
+                                            month: 'short',
+                                            year: 'numeric',
+                                          })}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {holiday.recurring && (
+                                      <span className="ml-2 flex-shrink-0 text-[9px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                        Yearly
+                                      </span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {/* Gradient fade at bottom to indicate more content */}
+                          {sortedHolidays.length > 4 && (
+                            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-slate-50/90 to-transparent pointer-events-none rounded-b-xl" />
+                          )}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>{sortedHolidays.length} holiday{sortedHolidays.length !== 1 ? 's' : ''} available</span>
+                        <span className="font-semibold text-slate-700">
+                          Total Chargeable Days: <span className="text-[#1b2559] text-base font-black ml-1">{totalDays}</span>
+                        </span>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">To Date *</label>
-                      <div className="relative">
-                        <input
-                          type="date"
-                          value={endDate}
-                          min={startDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                          required
-                        />
-                        <CalendarDays size={16} className="absolute left-3 top-3 text-slate-400" />
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">From Date *</label>
+                          <div className="relative">
+                            <input
+                              type="date"
+                              value={startDate}
+                              min={todayStr}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                              required
+                            />
+                            <CalendarDays size={16} className="absolute left-3 top-3 text-slate-400" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">To Date *</label>
+                          <div className="relative">
+                            <input
+                              type="date"
+                              value={endDate}
+                              min={startDate || todayStr}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                              required
+                            />
+                            <CalendarDays size={16} className="absolute left-3 top-3 text-slate-400" />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {Object.keys(dailyAmounts).length > 0 && (
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">Duration Adjustments</label>
-                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-                        <table className="w-full text-sm text-left text-slate-600">
-                          <thead className="text-[10px] text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-10">
-                            <tr>
-                              <th className="px-4 py-2 font-bold">Date</th>
-                              <th className="px-4 py-2 font-bold text-right">Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200/50">
-                            {Object.entries(dailyAmounts).map(([date, amount]) => {
-                              const isWeekend = new Date(date).getDay() === 0 || new Date(date).getDay() === 6;
-                              return (
-                                <tr key={date} className={isWeekend ? 'bg-slate-100/30 text-slate-400' : ''}>
-                                  <td className="px-4 py-2 font-medium">
-                                    {new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
-                                    {isWeekend && <span className="ml-2 text-[9px] uppercase tracking-wider bg-slate-200 px-1.5 py-0.5 rounded">Weekend</span>}
-                                  </td>
-                                  <td className="px-4 py-2 text-right">
-                                    <select
-                                      value={amount}
-                                      onChange={(e) => handleDailyAmountChange(date, Number(e.target.value))}
-                                      className="text-right bg-transparent outline-none cursor-pointer hover:bg-slate-200 px-2 py-1 rounded"
-                                    >
-                                      <option value={0}>0 (Exclude)</option>
-                                      {allowsHalfDay && <option value={0.5}>0.5 (Half Day)</option>}
-                                      <option value={1}>1 (Full Day)</option>
-                                    </select>
-                                  </td>
+                      {Object.keys(dailyAmounts).length > 0 && (
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">Duration Adjustments</label>
+                          <div className="bg-slate-50 border border-slate-200/60 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                            <table className="w-full text-sm text-left text-slate-600">
+                              <thead className="text-[10px] text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-10">
+                                <tr>
+                                  <th className="px-4 py-2 font-bold">Date</th>
+                                  <th className="px-4 py-2 font-bold text-right">Amount</th>
                                 </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="mt-2 text-right text-xs font-semibold text-slate-600">
-                        Total Chargeable Days: <span className="text-[#1b2559] text-base">{totalDays}</span>
-                      </div>
-                    </div>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200/50">
+                                {Object.entries(dailyAmounts).map(([date, amount]) => {
+                                  const isWeekend = new Date(date).getDay() === 0 || new Date(date).getDay() === 6;
+                                  return (
+                                    <tr key={date} className={isWeekend ? 'bg-slate-100/30 text-slate-400' : ''}>
+                                      <td className="px-4 py-2 font-medium">
+                                        {new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
+                                        {isWeekend && <span className="ml-2 text-[9px] uppercase tracking-wider bg-slate-200 px-1.5 py-0.5 rounded">Weekend</span>}
+                                      </td>
+                                      <td className="px-4 py-2 text-right">
+                                        <select
+                                          value={amount}
+                                          onChange={(e) => handleDailyAmountChange(date, Number(e.target.value))}
+                                          className="text-right bg-transparent outline-none cursor-pointer hover:bg-slate-200 px-2 py-1 rounded"
+                                        >
+                                          <option value={0}>0 (Exclude)</option>
+                                          {allowsHalfDay && <option value={0.5}>0.5 (Half Day)</option>}
+                                          <option value={1}>1 (Full Day)</option>
+                                        </select>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="mt-2 text-right text-xs font-semibold text-slate-600">
+                            Total Chargeable Days: <span className="text-[#1b2559] text-base">{totalDays}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <div>

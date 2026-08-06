@@ -9,7 +9,10 @@ import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import HistoryDrawer from '../components/HistoryDrawer';
 import { createEmployee, updateEmployee, deleteEmployee } from '../../services/employeesApi';
+import Pagination from '../../components/ui/Pagination';
 import { toAdminEmployee, toBackendEmployeePayload } from '../../services/mappers/employeeMapper';
+import { CANONICAL_DEPARTMENT_NAMES } from '../data/adminMockData';
+import { apiFetch } from '../../services/apiClient';
 
 const emptyForm = (): Omit<AdminEmployee, 'id'> => ({
   name: '',
@@ -37,6 +40,51 @@ export default function EmployeeList() {
   const [filterDept, setFilterDept] = useState('');
   const [filterCountry, setFilterCountry] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [onLeaveIds, setOnLeaveIds] = useState<Set<string>>(new Set());
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterDept, filterCountry, filterStatus]);
+
+  // Fetch who is on leave TODAY using the whos-out endpoint (same as WhosOut widget)
+  useEffect(() => {
+    const controller = new AbortController();
+    apiFetch<any[]>('/leave-requests/whos-out', { signal: controller.signal })
+      .then((data) => {
+        const all = Array.isArray(data) ? data : [];
+        const todayStr = new Date().toISOString().split('T')[0];
+        const ids = new Set<string>();
+        const names = new Set<string>();
+
+        all.forEach((r: any) => {
+          const isActive = r.status === 'APPROVED' || r.currentStatus === 'APPROVED'
+            || r.status === 'PENDING' || r.currentStatus === 'PENDING';
+          const s = (r.startDate || '').split('T')[0];
+          const e = (r.endDate || '').split('T')[0];
+          if (isActive && s <= todayStr && e >= todayStr) {
+            if (r.employee?.id)    ids.add(String(r.employee.id));
+            if (r.employeeId)      ids.add(String(r.employeeId));
+            if (r.employeeName)    names.add(String(r.employeeName).toLowerCase().trim());
+          }
+        });
+
+        // Also match by name for robustness (backend may not always return employeeId)
+        const finalIds = new Set<string>(ids);
+        state.employees.forEach(emp => {
+          if (names.has(emp.name.toLowerCase().trim())) {
+            finalIds.add(String(emp.id));
+          }
+        });
+
+        setOnLeaveIds(finalIds);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [state.employees]);
   
   // Drawer/Modal States
   const [formOpen, setFormOpen] = useState(false);
@@ -59,10 +107,21 @@ export default function EmployeeList() {
     }
   }, [toast]);
 
+  // Filter bar: only departments that actually have employees, so filtering by
+  // an empty department isn't offered. Add/Edit form: full canonical list (see
+  // departmentOptions below) so a department can be picked before anyone's
+  // assigned to it yet.
   const departments = [...new Set(state.employees.map(e => e.department))];
+  const departmentOptions = Array.from(new Set([...CANONICAL_DEPARTMENT_NAMES, ...departments])).sort();
   const countries = ['Lebanon', 'United Arab Emirates', 'Saudi Arabia', 'United Kingdom', 'France', 'Tunisia', 'Canada'];
 
-  const filtered = state.employees.filter(e => {
+  // Compute effective status: employees on leave today show as 'on_leave'
+  const employeesWithEffectiveStatus = state.employees.map(e => ({
+    ...e,
+    status: (e.status === 'active' && onLeaveIds.has(String(e.id))) ? 'on_leave' as AdminEmployee['status'] : e.status
+  }));
+
+  const filtered = employeesWithEffectiveStatus.filter(e => {
     const q = search.toLowerCase();
     return (
       (e.name.toLowerCase().includes(q) || e.email.toLowerCase().includes(q) || e.position.toLowerCase().includes(q)) &&
@@ -189,7 +248,7 @@ export default function EmployeeList() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div className="flex-1 min-w-48"><SearchInput value={search} onChange={setSearch} placeholder="Search name, email, position..." /></div>
-        <SelectFilter label="Department" value={filterDept}    onChange={setFilterDept}    options={departments.map(d => ({ label: d, value: d }))} />
+        <SelectFilter label="Department" value={filterDept}    onChange={setFilterDept}    options={departmentOptions.map(d => ({ label: d, value: d }))} />
         <SelectFilter label="Country"    value={filterCountry} onChange={setFilterCountry} options={countries.map(c => ({ label: c, value: c }))} />
         <SelectFilter label="Status"     value={filterStatus}  onChange={setFilterStatus}  options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }, { label: 'On Leave', value: 'on_leave' }, { label: 'Archived', value: 'archived' }]} />
       </div>
@@ -214,7 +273,7 @@ export default function EmployeeList() {
               {filtered.length === 0 && (
                 <tr><td colSpan={8} className="py-16 text-center text-slate-400 text-sm">No employees found</td></tr>
               )}
-              {filtered.map(emp => {
+              {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(emp => {
                 const mgr = state.employees.find(m => m.id === emp.managerId);
                 return (
                   <tr key={emp.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/30 transition-colors">
@@ -260,6 +319,16 @@ export default function EmployeeList() {
             </tbody>
           </table>
         </div>
+
+        {filtered.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
 
       {/* View Drawer */}
@@ -358,7 +427,7 @@ export default function EmployeeList() {
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department</label>
               <select value={form.department} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
-                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
 

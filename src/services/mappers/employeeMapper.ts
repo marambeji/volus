@@ -47,6 +47,7 @@ export function toBackendEmployeePayload(admin: Omit<AdminEmployee, 'id'>) {
   // Map status back to uppercase
   let status = 'ACTIVE';
 
+  if (admin.status === 'inactive') status = 'INACTIVE';
   if (admin.status === 'archived') status = 'ARCHIVED';
 
   // Map role back to uppercase enum

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useAdmin } from '../../store/AdminContext';
 import { useNavigate } from 'react-router-dom';
 
-export default function AdminHeader({ onMenuClick }: { onMenuClick: () => void }) {
+export default function AdminHeader({ onMenuClick, onLogout }: { onMenuClick: () => void; onLogout?: () => void }) {
   const { state } = useAdmin();
   const [dark, setDark] = useState(false);
   const navigate = useNavigate();
@@ -15,7 +15,7 @@ export default function AdminHeader({ onMenuClick }: { onMenuClick: () => void }
   }
 
   return (
-    <header className="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-6 sticky top-0 z-20 shadow-sm">
+    <header className="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-6 sticky top-0 z-20 shadow-sm print:hidden">
       <div className="flex items-center gap-4">
         <button onClick={onMenuClick} className="md:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100">
           <Menu size={20} />
@@ -40,9 +40,15 @@ export default function AdminHeader({ onMenuClick }: { onMenuClick: () => void }
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Administrator</p>
           </div>
         </div>
-        <button className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors ml-1" title="Exit Admin">
-          <LogOut size={18} />
-        </button>
+        {onLogout && (
+          <button 
+            onClick={onLogout} 
+            className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-colors ml-1 cursor-pointer" 
+            title="Logout"
+          >
+            <LogOut size={18} />
+          </button>
+        )}
       </div>
     </header>
   );

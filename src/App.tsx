@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import AdminApp from './admin/AdminApp';
 
 import LeaveTracking from './pages/LeaveTracking';
+import Reports from './pages/Reports';
 
 interface UserSession {
   id: string;
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/employee/dashboard" element={<Home />} />
           <Route path="/employee/my-info" element={<MyInfo />} />
           <Route path="/employee/leave-tracking" element={<LeaveTracking />} />
+          <Route path="/employee/reports" element={<Reports />} />
           <Route path="/employee/people" element={<People />} />
           
           {/* Protect Route: prevent employees (non-managers) from opening /employee/approval-dashboard */}
@@ -90,6 +92,7 @@ export default function App() {
             } 
           />
           <Route path="/employee/full-calendar" element={<FullCalendar />} />
+          <Route path="/full-calendar" element={<Navigate to="/employee/full-calendar" replace />} />
           
           {/* Redirect any other manually typed URL or admin URL to employee dashboard */}
           <Route path="*" element={<Navigate to="/employee/dashboard" replace />} />

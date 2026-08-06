@@ -219,7 +219,7 @@ export default function ApprovalProgressTimeline({
               <Ban size={12} />
             </span>
           )}
-          <div>
+          <div className="pl-1">
             <p
               className={`text-xs font-bold uppercase tracking-wider ${
                 requestStatus === 'APPROVED'

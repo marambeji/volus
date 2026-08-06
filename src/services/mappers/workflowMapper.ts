@@ -13,6 +13,8 @@ export interface BackendWorkflowStepResponse {
   id: string;
   stepOrder: number;
   approverType: BackendApproverType;
+  departmentId?: string | null;
+  specificApproverEmployeeId?: string | null;
   specificApproverId: string | null;
   specificApproverEmail: string | null;
   isRequired: boolean;
@@ -43,6 +45,8 @@ export interface CreateWorkflowDto {
   steps: {
     stepOrder: number;
     approverType: BackendApproverType;
+    departmentId?: string | null;
+    specificApproverEmployeeId?: string | null;
     specificApproverId?: string | null;
     specificApproverEmail?: string | null;
     isRequired: boolean;
@@ -60,6 +64,8 @@ export interface UpdateWorkflowDto {
   steps?: {
     stepOrder: number;
     approverType: BackendApproverType;
+    departmentId?: string | null;
+    specificApproverEmployeeId?: string | null;
     specificApproverId?: string | null;
     specificApproverEmail?: string | null;
     isRequired: boolean;
@@ -107,13 +113,17 @@ export function frontendWorkflowToCreateDto(config: ApprovalConfiguration): Crea
     effectiveFrom: config.effectiveFrom || todayStr,
     effectiveTo: config.effectiveTo || null,
     steps: config.levels.map((lvl, idx) => {
-      const isSpecific = lvl.type === 'specific_employee';
+      const isSpecific = lvl.type === 'specific_employee' || (lvl.type as string) === 'SPECIFIC_PERSON';
       const emailVal = isSpecific && lvl.specificEmployeeEmail?.trim() ? lvl.specificEmployeeEmail.trim() : null;
+      const deptId = isSpecific && lvl.departmentId ? lvl.departmentId : null;
+      const empId = isSpecific && lvl.specificApproverEmployeeId ? lvl.specificApproverEmployeeId : null;
       return {
         stepOrder: idx + 1,
         approverType: mapFrontendApproverTypeToBackend(lvl.type),
+        departmentId: isSpecific ? deptId : null,
+        specificApproverEmployeeId: isSpecific ? empId : null,
+        specificApproverId: isSpecific ? empId : null,
         specificApproverEmail: isSpecific ? emailVal : null,
-        specificApproverId: null,
         isRequired: true,
       };
     }),
@@ -128,7 +138,9 @@ export function workflowResponseToFrontendWorkflow(res: BackendWorkflowResponse)
   const sortedSteps = [...(res.steps || [])].sort((a, b) => a.stepOrder - b.stepOrder);
   const levels: ApprovalLevel[] = sortedSteps.map((s) => ({
     type: mapBackendApproverTypeToFrontend(s.approverType),
-    specificEmployeeEmail: s.specificApproverEmail || s.specificApproverId || '',
+    departmentId: s.departmentId || undefined,
+    specificApproverEmployeeId: s.specificApproverEmployeeId || s.specificApproverId || undefined,
+    specificEmployeeEmail: s.specificApproverEmail || '',
   }));
 
   return {

@@ -96,7 +96,7 @@ export default function WhosOut() {
         </div>
 
         <button
-          onClick={() => navigate('/full-calendar')}
+          onClick={() => navigate('/employee/full-calendar')}
           className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
         >
           <Calendar size={13} />

@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { X, LayoutDashboard, Users, CalendarCheck, Wallet, FileText, Globe, Palmtree, Building2, BarChart3, Settings, ClipboardList, Bell, Shield, History, LogOut } from 'lucide-react';
 import { useAdmin } from '../../store/AdminContext';
+import { getGlobalAuditLogs } from '../../../services/auditLogsApi';
 
 const nav = [
   { section: 'OVERVIEW',       items: [{ label: 'Dashboard',        path: '/admin/dashboard',   icon: LayoutDashboard }] },
@@ -13,7 +15,40 @@ const nav = [
 
 export default function AdminSidebar({ isOpen, onClose, onLogout }: { isOpen: boolean; onClose: () => void; onLogout?: () => void }) {
   const { state } = useAdmin();
-  const unread = state.notifications.filter(n => !n.read).length;
+  const [notifTotal, setNotifTotal] = useState<number>(0);
+  const [readCount, setReadCount]   = useState<number>(0);
+
+  useEffect(() => {
+    const syncReadCount = () => {
+      try {
+        const raw = localStorage.getItem('notif_read_ids');
+        setReadCount(raw ? JSON.parse(raw).length : 0);
+      } catch { setReadCount(0); }
+    };
+
+    syncReadCount();
+
+    // Listen to custom event and native window storage events
+    window.addEventListener('notif_read_updated', syncReadCount);
+    window.addEventListener('storage', syncReadCount);
+
+    // Fetch total audit log count from backend
+    getGlobalAuditLogs()
+      .then(data => setNotifTotal(data.length))
+      .catch(() => setNotifTotal(0));
+
+    // Polling fallback to ensure fast reactivity across tab/clicks
+    const interval = setInterval(syncReadCount, 500);
+
+    return () => {
+      window.removeEventListener('notif_read_updated', syncReadCount);
+      window.removeEventListener('storage', syncReadCount);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const unread = Math.max(0, notifTotal - readCount);
+  const badgeLabel = unread > 99 ? '+99' : String(unread);
 
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{"name":"HR Admin","email":"admin@novelus.com","role":"admin","avatar":"HR"}');
 
@@ -22,7 +57,7 @@ export default function AdminSidebar({ isOpen, onClose, onLogout }: { isOpen: bo
       {/* Mobile overlay */}
       <div className={`fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 md:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={onClose} />
 
-      <aside className={`fixed inset-y-0 left-0 z-45 w-64 bg-[#0f172a] text-slate-300 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-45 w-64 bg-[#0f172a] text-slate-300 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 print:hidden ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-5 border-b border-slate-800 flex-shrink-0">
           <div className="flex items-center">
@@ -55,7 +90,7 @@ export default function AdminSidebar({ isOpen, onClose, onLogout }: { isOpen: bo
                       <span>{item.label}</span>
                     </div>
                     {item.label === 'Notifications' && unread > 0 && (
-                      <span className="bg-violet-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">{unread}</span>
+                      <span className="bg-violet-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{badgeLabel}</span>
                     )}
                   </NavLink>
                 ))}

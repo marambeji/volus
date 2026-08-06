@@ -64,7 +64,7 @@ export default function UpcomingHolidays() {
       </div>
 
       {/* List */}
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-slate-50 overflow-y-auto" style={{ maxHeight: '340px' }}>
         {sorted.map((holiday) => {
           const days = daysUntil(holiday.date);
           const isPast = days < 0;

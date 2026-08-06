@@ -35,7 +35,7 @@ export interface BackendEmployee {
 }
 
 export async function getEmployees(
-  query?: { q?: string; status?: string; limit?: number },
+  query?: { q?: string; status?: string; limit?: number; divisionId?: string; departmentId?: string },
   signal?: AbortSignal
 ): Promise<BackendEmployee[]> {
   let url = '/employees?limit=' + (query?.limit ?? 200);
@@ -44,6 +44,12 @@ export async function getEmployees(
   }
   if (query?.status) {
     url += '&status=' + encodeURIComponent(query.status);
+  }
+  if (query?.divisionId) {
+    url += '&divisionId=' + encodeURIComponent(query.divisionId);
+  }
+  if (query?.departmentId) {
+    url += '&departmentId=' + encodeURIComponent(query.departmentId);
   }
   const res = await apiFetch<PaginatedResponse<BackendEmployee>>(url, { signal });
   return res.data;

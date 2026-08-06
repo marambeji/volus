@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Shield, AlertCircle, RefreshCw, History } from 'lucide-react';
-import type { ApprovalConfiguration, ApprovalLevel } from '../types/adminTypes';
+import type { ApprovalConfiguration, ApprovalLevel, ApproverType } from '../types/adminTypes';
 import SearchInput from '../components/ui/SearchInput';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
@@ -13,27 +13,17 @@ import {
 } from '../../services/approvalWorkflowsApi';
 import { getCountries, type CountryItem } from '../../services/countriesApi';
 import { getLeaveTypes, type LeaveTypeItem } from '../../services/leaveTypesApi';
-
+import { getEmployees, type BackendEmployee } from '../../services/employeesApi';
+import { getDivisions, type DivisionItem } from '../../services/divisionsApi';
 import { ApiError } from '../../services/apiClient';
 
-/** Auto-assign approver types based on number of levels */
-function getLevelsForCount(count: number): ApprovalLevel[] {
-  if (count === 1) return [{ type: 'manager' }];
-  if (count === 2) return [{ type: 'manager' }, { type: 'hr' }];
-  return [{ type: 'manager' }, { type: 'manager_manager' }, { type: 'hr' }];
-}
-
-const LEVEL_LABELS: Record<string, string> = {
-  manager: "Employee's Manager",
-  manager_manager: "Manager's Manager",
-  hr: 'HR Department',
-};
+const emptyLevel: ApprovalLevel = { type: 'manager' };
 
 const emptyForm = (): ApprovalConfiguration => ({
   id: '',
   name: '',
   levelsCount: 1,
-  levels: getLevelsForCount(1),
+  levels: [{ ...emptyLevel }],
   description: '',
   countryId: '',
   leaveTypeId: '',
@@ -47,7 +37,8 @@ export default function ApprovalLevels() {
   const [workflows, setWorkflows] = useState<ApprovalConfiguration[]>([]);
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeItem[]>([]);
-
+  const [employees, setEmployees] = useState<BackendEmployee[]>([]);
+  const [divisions, setDivisions] = useState<DivisionItem[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,18 +52,26 @@ export default function ApprovalLevels() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [historyTarget, setHistoryTarget] = useState<{ entityType: string; entityId: string; name: string } | null>(null);
 
+  // Per-level department employees (loaded lazily on department selection)
+  const [deptEmployees, setDeptEmployees] = useState<Record<number, BackendEmployee[]>>({});
+  const [deptLoading, setDeptLoading] = useState<Record<number, boolean>>({});
+
   const loadData = async (signal?: AbortSignal) => {
     setLoading(true);
     setApiError(null);
     try {
-      const [wfs, cList, ltList] = await Promise.all([
+      const [wfs, cList, ltList, empList, divList] = await Promise.all([
         getApprovalWorkflows(signal),
         getCountries(signal),
         getLeaveTypes(signal),
+        getEmployees({ limit: 1000 }, signal),
+        getDivisions(signal),
       ]);
       setWorkflows(wfs);
       setCountries(cList || []);
       setLeaveTypes(ltList || []);
+      setEmployees(empList || []);
+      setDivisions(divList || []);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load approval workflows data';
@@ -113,7 +112,71 @@ export default function ApprovalLevels() {
   }
 
   function handleLevelsCountChange(count: number) {
-    setForm((p) => ({ ...p, levelsCount: count, levels: getLevelsForCount(count) }));
+    const nextLevels = [...form.levels];
+    if (count > nextLevels.length) {
+      while (nextLevels.length < count) {
+        nextLevels.push({ ...emptyLevel });
+      }
+    } else if (count < nextLevels.length) {
+      nextLevels.splice(count);
+    }
+    setForm((p) => ({ ...p, levelsCount: count, levels: nextLevels }));
+  }
+
+  async function loadEmployeesForDept(index: number, deptId: string) {
+    setDeptLoading((prev) => ({ ...prev, [index]: true }));
+    try {
+      const emps = await getEmployees({ status: 'ACTIVE', divisionId: deptId, limit: 500 });
+      setDeptEmployees((prev) => ({ ...prev, [index]: emps }));
+    } catch {
+      setDeptEmployees((prev) => ({ ...prev, [index]: [] }));
+    } finally {
+      setDeptLoading((prev) => ({ ...prev, [index]: false }));
+    }
+  }
+
+  function handleLevelChange(index: number, field: keyof ApprovalLevel, value: any) {
+    const nextLevels = [...form.levels];
+    const prev = nextLevels[index];
+
+    if (field === 'type') {
+      if (value !== 'specific_employee' && prev.type === 'specific_employee') {
+        nextLevels[index] = { type: value as ApproverType };
+        setDeptEmployees((d) => { const n = { ...d }; delete n[index]; return n; });
+      } else if (value === 'specific_employee' && prev.type !== 'specific_employee') {
+        nextLevels[index] = {
+          type: value as ApproverType,
+          departmentId: undefined,
+          specificApproverEmployeeId: undefined,
+          specificEmployeeEmail: undefined,
+        };
+      } else {
+        nextLevels[index] = { ...prev, type: value as ApproverType };
+      }
+    } else if (field === 'departmentId') {
+      nextLevels[index] = {
+        ...prev,
+        departmentId: value || undefined,
+        specificApproverEmployeeId: undefined,
+        specificEmployeeEmail: undefined,
+      };
+      if (value) {
+        void loadEmployeesForDept(index, value);
+      } else {
+        setDeptEmployees((d) => { const n = { ...d }; delete n[index]; return n; });
+      }
+    } else if (field === 'specificApproverEmployeeId') {
+      const selected = (deptEmployees[index] || employees).find((emp) => emp.id === value);
+      nextLevels[index] = {
+        ...prev,
+        specificApproverEmployeeId: value || undefined,
+        specificEmployeeEmail: selected?.email || undefined,
+      };
+    } else {
+      nextLevels[index] = { ...prev, [field]: value };
+    }
+
+    setForm((p) => ({ ...p, levels: nextLevels }));
   }
 
   function validate(): boolean {
@@ -131,7 +194,16 @@ export default function ApprovalLevels() {
       newErrors.effectiveFrom = 'Effective date is required';
     }
 
-
+    form.levels.forEach((lvl, idx) => {
+      if (lvl.type === 'specific_employee' || (lvl.type as string) === 'SPECIFIC_PERSON') {
+        if (!lvl.departmentId) {
+          newErrors[`level_${idx}_dept`] = 'Department is required for Specific Person';
+        }
+        if (!lvl.specificApproverEmployeeId) {
+          newErrors[`level_${idx}`] = 'Person is required for Specific Person';
+        }
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -182,169 +254,167 @@ export default function ApprovalLevels() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="p-8 max-w-7xl mx-auto space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Approval Levels</h1>
-          <p className="text-slate-400 text-sm mt-1">Configure multi-stage approval workflows for leave requests</p>
+          <p className="text-sm text-slate-400 mt-1">Configure multi-stage approval workflows for leave requests</p>
         </div>
         <button
           onClick={openAdd}
-          disabled={Boolean(apiError) || loading}
-          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-sm transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-violet-600/20 cursor-pointer"
         >
-          <Plus size={16} /> Add Configuration
+          <Plus size={18} />
+          Add Configuration
         </button>
       </div>
 
-      {/* Backend error banner */}
       {apiError && (
-        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl flex items-center justify-between">
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl flex items-center justify-between text-red-600 dark:text-red-400 text-sm">
           <div className="flex items-center gap-2">
             <AlertCircle size={18} />
-            <span className="text-sm font-medium">{apiError}</span>
+            <span>{apiError}</span>
           </div>
-          <button
-            onClick={() => void loadData()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-800/40 text-red-800 dark:text-red-200 rounded-lg text-xs font-bold hover:bg-red-200 transition-colors"
-          >
-            <RefreshCw size={13} /> Retry
+          <button onClick={() => void loadData()} className="flex items-center gap-1 text-xs font-bold underline hover:opacity-80">
+            <RefreshCw size={12} /> Retry
           </button>
         </div>
       )}
 
-      {/* Filter and search */}
-      <div className="w-full sm:w-64">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search configurations..." />
+      {/* Filter / Search Bar */}
+      <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div className="flex-1 max-w-md">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search configurations..." />
+        </div>
       </div>
 
-      {/* Loading state */}
-      {loading && !apiError && (
-        <div className="py-16 text-center text-slate-400 text-sm flex justify-center items-center gap-2">
-          <RefreshCw size={16} className="animate-spin text-violet-600" /> Loading approval configurations...
-        </div>
-      )}
-
       {/* Grid List */}
-      {!loading && !apiError && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      {loading ? (
+        <div className="py-20 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
+          <RefreshCw size={18} className="animate-spin" /> Loading configurations...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-12 text-center border border-slate-100 dark:border-slate-700 space-y-3">
+          <Shield size={40} className="mx-auto text-slate-300 dark:text-slate-600" />
+          <p className="font-bold text-slate-600 dark:text-slate-300">No approval configurations found</p>
+          <p className="text-xs text-slate-400">Click "Add Configuration" to create your first multi-tier approval workflow.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map((config) => {
-            const country = countries.find((c) => c.id === config.countryId);
-            const leaveType = leaveTypes.find((lt) => lt.id === config.leaveTypeId);
+            const countryName = countries.find((c) => c.id === config.countryId)?.name || 'Global / Default';
+            const leaveTypeLabel = leaveTypes.find((lt) => lt.id === config.leaveTypeId)?.label || 'All Types';
+            const levelsCount = config.levelsCount || config.levels.length;
+
             return (
               <div
                 key={config.id}
-                className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 shadow-sm flex flex-col justify-between hover:border-violet-300 transition-colors"
+                className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between gap-4"
               >
-                <div>
-                  <div className="flex justify-between items-start mb-3">
+                <div className="space-y-4">
+                  {/* Card Header: Shield icon, Title, Status & Actions */}
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/30 rounded-xl flex items-center justify-center text-violet-600 dark:text-violet-400">
+                      <div className="w-10 h-10 rounded-2xl bg-purple-50 dark:bg-purple-950/40 flex items-center justify-center text-purple-600 dark:text-purple-400 flex-shrink-0 border border-purple-100 dark:border-purple-900/50">
                         <Shield size={20} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="font-bold text-slate-800 dark:text-white text-base">{config.name}</h3>
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold tracking-wide uppercase ${
+                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${
                               config.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                ? 'bg-emerald-100/80 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-400'
                             }`}
                           >
-                            {config.status}
+                            {config.status || 'ACTIVE'}
                           </span>
                         </div>
-                        <p className="text-[10px] text-slate-400">
-                          Effective: {config.effectiveFrom} {config.effectiveTo ? `to ${config.effectiveTo}` : 'onward'}
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Effective: {config.effectiveFrom || '2026-01-01'} {config.effectiveTo ? `to ${config.effectiveTo}` : 'onward'}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+
+                    {/* Action buttons on top right */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         onClick={() => setHistoryTarget({ entityType: 'ApprovalWorkflow', entityId: config.id, name: config.name })}
-                        className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-indigo-600 rounded-xl transition-colors cursor-pointer"
-                        title="Audit History"
+                        className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                        title="History"
                       >
-                        <History size={13} />
+                        <History size={15} />
                       </button>
                       <button
                         onClick={() => openEdit(config)}
-                        className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-violet-600 rounded-xl transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
                         title="Edit"
                       >
-                        <Edit2 size={13} />
+                        <Edit2 size={15} />
                       </button>
                       <button
                         onClick={() => setDeleteId(config.id)}
-                        className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
                         title="Delete"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {country && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 dark:bg-slate-700 px-2 py-0.5 rounded-lg">
-                        {country.flag} {country.name}
-                      </span>
-                    )}
-                    {leaveType && (
-                      <span
-                        className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg border"
-                        style={{ color: leaveType.color, borderColor: leaveType.color + '30', backgroundColor: leaveType.color + '10' }}
-                      >
-                        {leaveType.label}
-                      </span>
-                    )}
+                  {/* Pills for Country & Leave Type */}
+                  <div className="flex items-center gap-2 flex-wrap pt-1">
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                      {countryName}
+                    </span>
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border border-violet-100 dark:border-violet-900/40">
+                      {leaveTypeLabel}
+                    </span>
                   </div>
 
-                  {config.description && (
-                    <p className="text-xs text-slate-500 mb-4 italic">"{config.description}"</p>
-                  )}
-
-                  {/* Levels flow */}
-                  <div className="space-y-2.5 mt-4">
-                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Approval Sequence ({config.levelsCount} {config.levelsCount === 1 ? 'level' : 'levels'})
-                    </h4>
-                    {config.levels.map((lvl, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-3 bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-xl border border-slate-100/50 dark:border-slate-700"
-                      >
-                        <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-bold text-[10px] flex items-center justify-center">
-                          {index + 1}
-                        </span>
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          {LEVEL_LABELS[lvl.type] || lvl.type}
-                        </p>
-                      </div>
-                    ))}
+                  {/* Approval Sequence Section */}
+                  <div className="space-y-2 pt-2">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      APPROVAL SEQUENCE ({levelsCount} {levelsCount === 1 ? 'LEVEL' : 'LEVELS'})
+                    </p>
+                    <div className="space-y-2 bg-slate-50/80 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      {config.levels.map((lvl, idx) => (
+                        <div key={idx} className="flex items-center gap-2.5">
+                          <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            {lvl.type === 'manager'
+                              ? "Employee's Manager"
+                              : lvl.type === 'manager_manager'
+                              ? "Manager's Manager"
+                              : lvl.type === 'specific_employee' || (lvl.type as string) === 'SPECIFIC_PERSON'
+                              ? 'Specific Person'
+                              : 'HR Department'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             );
           })}
-          {filtered.length === 0 && (
-            <div className="col-span-full py-16 text-center text-slate-400 text-sm">No configurations found</div>
-          )}
         </div>
       )}
 
-      {/* Form SlideDrawer */}
+      {/* Drawer for Create / Edit */}
       <SlideDrawer
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
         title={editConfig ? 'Edit Configuration' : 'Add Configuration'}
-        subtitle={editConfig ? `Modifying ${editConfig.name}` : 'Create a new multi-tier approval workflow'}
+        subtitle={editConfig ? 'Update multi-tier approval workflow' : 'Create a new multi-tier approval workflow'}
       >
-        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5 h-full overflow-y-auto">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {errors.form && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-600 dark:text-red-300 rounded-xl text-xs flex items-center gap-1.5">
+            <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl text-xs flex items-center gap-2 font-medium">
               <AlertCircle size={14} /> {errors.form}
             </div>
           )}
@@ -357,7 +427,7 @@ export default function ApprovalLevels() {
               type="text"
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Finance Team Workflow"
+              placeholder="e.g., France Standard 2-Tier Approval"
               className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
                 errors.name ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
               } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
@@ -371,14 +441,14 @@ export default function ApprovalLevels() {
 
           <div>
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-              Description
+              Description (Optional)
             </label>
             <textarea
+              rows={2}
               value={form.description || ''}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               placeholder="Describe when this approval hierarchy should be applied..."
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+              className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
           </div>
 
@@ -397,7 +467,7 @@ export default function ApprovalLevels() {
                 <option value="">Select country...</option>
                 {countries.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.flag} {c.name}
+                    {c.code} {c.name}
                   </option>
                 ))}
               </select>
@@ -504,7 +574,7 @@ export default function ApprovalLevels() {
             {form.levels.map((lvl, index) => (
               <div
                 key={index}
-                className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-200/50 dark:border-slate-700 space-y-2"
+                className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200/50 dark:border-slate-700 space-y-3"
               >
                 <div className="flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-black text-[10px] flex items-center justify-center">
@@ -515,21 +585,141 @@ export default function ApprovalLevels() {
                   </span>
                 </div>
 
-                <div>
-                  <select
-                    value={lvl.type}
-                    onChange={(e) => {
-                      const nextLevels = [...form.levels];
-                      nextLevels[index] = { ...nextLevels[index], type: e.target.value as any };
-                      setForm((p) => ({ ...p, levels: nextLevels }));
-                    }}
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
-                  >
-                    <option value="manager">Employee's Manager (manager)</option>
-                    <option value="manager_manager">Manager's Manager (manager_manager)</option>
-                    <option value="hr">HR Department (hr)</option>
-                  </select>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Approver Type</label>
+                    <select
+                      value={lvl.type}
+                      onChange={(e) => handleLevelChange(index, 'type', e.target.value as ApproverType)}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium"
+                    >
+                      <option value="manager">Employee's Manager (manager)</option>
+                      <option value="manager_manager">Manager's Manager (manager_manager)</option>
+                      <option value="specific_employee">Specific Person (specific_person)</option>
+                      <option value="hr">HR Department (hr)</option>
+                    </select>
+                  </div>
                 </div>
+
+                {/* Conditional rendering for Specific Person */}
+                {(lvl.type === 'specific_employee' || (lvl.type as string) === 'SPECIFIC_PERSON') && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">
+                        Department *
+                      </label>
+                      {(() => {
+                        const REGIONAL_EXCLUSIONS = new Set(['africa', 'europe', 'global', 'gulf', 'levant', 'human resources']);
+                        const defaultDepts = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'Operations', 'Legal', 'Design', 'Executive'];
+                        const deptOptions: Array<{ id: string; name: string }> = [];
+                        const addedNames = new Set<string>();
+
+                        divisions.forEach((div) => {
+                          const lower = div.name.toLowerCase();
+                          if (!REGIONAL_EXCLUSIONS.has(lower) && !addedNames.has(lower)) {
+                            deptOptions.push({ id: div.id, name: div.name });
+                            addedNames.add(lower);
+                          }
+                        });
+
+                        employees.forEach((emp) => {
+                          if (emp.department) {
+                            const lower = emp.department.toLowerCase();
+                            if (!REGIONAL_EXCLUSIONS.has(lower) && !addedNames.has(lower)) {
+                              deptOptions.push({ id: emp.divisionId || emp.department, name: emp.department });
+                              addedNames.add(lower);
+                            }
+                          }
+                        });
+
+                        defaultDepts.forEach((dName) => {
+                          const lower = dName.toLowerCase();
+                          if (!addedNames.has(lower)) {
+                            deptOptions.push({ id: dName, name: dName });
+                            addedNames.add(lower);
+                          }
+                        });
+
+                        return (
+                          <select
+                            value={lvl.departmentId || ''}
+                            onChange={(e) => handleLevelChange(index, 'departmentId', e.target.value)}
+                            className={`w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border ${
+                              errors[`level_${index}_dept`] ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
+                            } rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                          >
+                            <option value="">Select department...</option>
+                            {deptOptions.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                      {errors[`level_${index}_dept`] && (
+                        <p className="text-red-500 text-[9px] mt-1 flex items-center gap-0.5">
+                          <AlertCircle size={8} /> {errors[`level_${index}_dept`]}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">
+                        Person *
+                      </label>
+                      {(() => {
+                        const deptVal = lvl.departmentId || '';
+                        const selectedDiv = divisions.find((d) => d.id === deptVal || d.name.toLowerCase() === deptVal.toLowerCase());
+                        const deptNameLower = selectedDiv ? selectedDiv.name.toLowerCase() : deptVal.toLowerCase();
+
+                        const availableEmps = (deptEmployees[index] && deptEmployees[index].length > 0)
+                          ? deptEmployees[index]
+                          : employees.filter((e) => {
+                              const isAct = e.status === 'ACTIVE' || (e.status as string) === 'active';
+                              if (!isAct) return false;
+                              if (!deptVal) return false;
+                              const matchesDiv = e.divisionId === deptVal;
+                              const matchesDeptName = e.department && e.department.toLowerCase() === deptNameLower;
+                              return matchesDiv || matchesDeptName;
+                            });
+
+                        return (
+                          <select
+                            value={lvl.specificApproverEmployeeId || ''}
+                            disabled={!lvl.departmentId || deptLoading[index]}
+                            onChange={(e) => handleLevelChange(index, 'specificApproverEmployeeId', e.target.value)}
+                            className={`w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border ${
+                              errors[`level_${index}`] ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
+                            } rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {!lvl.departmentId ? (
+                              <option value="">Select a department first...</option>
+                            ) : deptLoading[index] ? (
+                              <option value="">Loading employees...</option>
+                            ) : availableEmps.length === 0 ? (
+                              <option value="">No employees found in this department</option>
+                            ) : (
+                              <>
+                                <option value="">Choose person...</option>
+                                {availableEmps.map((emp) => (
+                                  <option key={emp.id} value={emp.id}>
+                                    {emp.fullName} — {emp.jobTitle}
+                                  </option>
+                                ))}
+                              </>
+                            )}
+                          </select>
+                        );
+                      })()}
+                      {errors[`level_${index}`] && (
+                        <p className="text-red-500 text-[9px] mt-1 flex items-center gap-0.5">
+                          <AlertCircle size={8} /> {errors[`level_${index}`]}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

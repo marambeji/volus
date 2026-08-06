@@ -12,7 +12,9 @@ import { getDivisions } from '../../services/divisionsApi';
 import type { DivisionItem } from '../../services/divisionsApi';
 import { getLeaveTypes } from '../../services/leaveTypesApi';
 import type { LeaveTypeItem } from '../../services/leaveTypesApi';
-import { getApprovalWorkflows } from '../../services/approvalWorkflowsApi';
+import { getApprovalWorkflows, updateApprovalWorkflow } from '../../services/approvalWorkflowsApi';
+import { getEmployees } from '../../services/employeesApi';
+import type { BackendEmployee } from '../../services/employeesApi';
 import {
   getPolicies,
   createPolicy,
@@ -21,8 +23,50 @@ import {
 } from '../../services/policiesApi';
 import { ApiError } from '../../services/apiClient';
 import type { ApprovalConfiguration } from '../types/adminTypes';
+import { CANONICAL_DEPARTMENT_NAMES } from '../data/adminMockData';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// A workflow with exactly one step is a plain approver-type shortcut (Manager,
+// HR, Specific Person, ...) rather than a genuine multi-step chain — display
+// the approver type instead of trusting whatever name it was saved under
+// (some single-step "Specific Person" workflows were seeded with junk names).
+const APPROVER_TYPE_LABELS: Record<string, string> = {
+  manager: "Employee's Manager",
+  manager_manager: "Manager's Manager",
+  specific_employee: 'Specific Person',
+  hr: 'HR Department',
+};
+
+function isSpecificPersonWorkflow(w: ApprovalConfiguration): boolean {
+  const type = w.levels[0]?.type as string;
+  return w.levels.length === 1 && (type === 'specific_employee' || type === 'SPECIFIC_PERSON');
+}
+
+function workflowDisplayLabel(w: ApprovalConfiguration): string {
+  if (w.levels.length === 1) {
+    const label = APPROVER_TYPE_LABELS[w.levels[0].type];
+    if (label) return label;
+  }
+  return w.name;
+}
+
+// Policies only bind to a single quick approver-type shortcut, not a full
+// custom multi-level chain (those are configured per-employee on the
+// Approval Levels page instead). Collapse the raw workflow list down to one
+// entry per approver type, in a fixed order, so duplicates and multi-step
+// chains like "2level of approval" don't clutter the Add/Edit Policy picker.
+const APPROVER_TYPE_ORDER = ['manager', 'manager_manager', 'hr', 'specific_employee'];
+
+function getCanonicalWorkflows(all: ApprovalConfiguration[]): ApprovalConfiguration[] {
+  const byType: Record<string, ApprovalConfiguration> = {};
+  for (const w of all) {
+    if (w.levels.length !== 1) continue;
+    const type = w.levels[0]?.type as string;
+    if (APPROVER_TYPE_LABELS[type] && !byType[type]) byType[type] = w;
+  }
+  return APPROVER_TYPE_ORDER.map((t) => byType[t]).filter((w): w is ApprovalConfiguration => !!w);
+}
 
 const defaultQuotaForType = (typeKey: string, typeId?: string): LeaveQuota => {
   const keyLower = typeKey.toLowerCase();
@@ -63,6 +107,7 @@ export default function LeavePolicies() {
   const [divisions, setDivisions] = useState<DivisionItem[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeItem[]>([]);
   const [workflows, setWorkflows] = useState<ApprovalConfiguration[]>([]);
+  const [employees, setEmployees] = useState<BackendEmployee[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -84,6 +129,10 @@ export default function LeavePolicies() {
   const [divisionAssignment, setDivisionAssignment] = useState('');
   const [weekendDays, setWeekendDays] = useState<number[]>([0, 6]);
 
+  // Only relevant when the selected Approval Workflow is a single-step "Specific Person" shortcut
+  const [specificDeptId, setSpecificDeptId] = useState('');
+  const [specificPersonId, setSpecificPersonId] = useState('');
+
   // Quota Form State per LeaveType (indexed by stable leaveTypeId or key)
   const [quotasByTypeId, setQuotasByTypeId] = useState<Record<string, LeaveQuota>>({});
   const [selectedLeaveTypeId, setSelectedLeaveTypeId] = useState<string>('');
@@ -96,12 +145,13 @@ export default function LeavePolicies() {
     setLoading(true);
     setApiError(null);
     try {
-      const [cRes, dRes, ltRes, wfRes, pRes] = await Promise.all([
+      const [cRes, dRes, ltRes, wfRes, pRes, empRes] = await Promise.all([
         getCountries(signal),
         getDivisions(signal),
         getLeaveTypes(signal),
         getApprovalWorkflows(signal),
         getPolicies(signal),
+        getEmployees({ limit: 1000 }, signal),
       ]);
 
       setCountries(cRes);
@@ -109,6 +159,7 @@ export default function LeavePolicies() {
       setLeaveTypes(ltRes);
       setWorkflows(wfRes);
       setPolicies(pRes);
+      setEmployees(empRes || []);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load policy configuration data';
@@ -124,10 +175,49 @@ export default function LeavePolicies() {
     return () => controller.abort();
   }, []);
 
+  function handleWorkflowChange(id: string) {
+    setApprovalWorkflow(id);
+    const wf = workflows.find((w) => w.id === id);
+    if (wf && isSpecificPersonWorkflow(wf)) {
+      const lvl = wf.levels[0];
+      setSpecificDeptId(lvl.departmentId || '');
+      setSpecificPersonId(lvl.specificApproverEmployeeId || '');
+    } else {
+      setSpecificDeptId('');
+      setSpecificPersonId('');
+    }
+  }
+
   const filtered = policies.filter(
     (p) =>
       p.policyName.toLowerCase().includes(search.toLowerCase()) ||
       p.country.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selectedWorkflow = workflows.find((w) => w.id === approvalWorkflow);
+  const showSpecificPersonFields = !!selectedWorkflow && isSpecificPersonWorkflow(selectedWorkflow);
+
+  const canonicalWorkflows = getCanonicalWorkflows(workflows);
+  // If a policy was saved against a workflow outside the 4 canonical shortcuts
+  // (e.g. a legacy custom chain), keep it selectable so its assignment stays visible.
+  const workflowOptions =
+    selectedWorkflow && !canonicalWorkflows.some((w) => w.id === selectedWorkflow.id)
+      ? [...canonicalWorkflows, selectedWorkflow]
+      : canonicalWorkflows;
+
+  // Departments aren't a separate backend entity. Offer the full canonical
+  // list (so a department can be picked even before anyone's assigned to it
+  // yet) plus any other department name actually in use on real employee
+  // records, deduped — using the real "Human Resources" string throughout,
+  // not a guessed "HR" that would silently match zero employees.
+  const departmentOptions = Array.from(
+    new Set([
+      ...CANONICAL_DEPARTMENT_NAMES,
+      ...employees.map((e) => e.department).filter((d): d is string => !!d),
+    ])
+  ).sort();
+  const specificDeptActiveEmployees = employees.filter(
+    (e) => e.department === specificDeptId && (e.status === 'ACTIVE' || (e.status as string) === 'active')
   );
 
   const activeLeaveTypes = leaveTypes.filter(
@@ -169,13 +259,13 @@ export default function LeavePolicies() {
 
   function openAdd() {
     const firstC = countries[0];
-    const firstWf = workflows[0];
+    const firstWf = canonicalWorkflows[0] || workflows[0];
     setPolicyName('');
     setCountryCode(firstC?.code || 'LB');
     setCountryName(firstC?.name || 'Lebanon');
     setFlag(firstC?.flag || '🇱🇧');
     setWorkingHoursPerDay(8);
-    setApprovalWorkflow(firstWf?.id || '');
+    handleWorkflowChange(firstWf?.id || '');
     setDivisionAssignment('');
     setWeekendDays([0, 6]);
 
@@ -193,12 +283,16 @@ export default function LeavePolicies() {
   }
 
   function populatePolicyData(policy: CountryPolicy) {
-    setPolicyName(policy.policyName);
-    setCountryCode(policy.countryCode);
-    setCountryName(policy.country);
-    setFlag(policy.flag);
-    setWorkingHoursPerDay(policy.workingHoursPerDay);
-    setApprovalWorkflow(policy.approvalWorkflow);
+    setPolicyName(policy.policyName || '');
+    setCountryCode(policy.countryCode || countries[0]?.code || 'LB');
+    setCountryName(policy.country || countries[0]?.name || 'Lebanon');
+    setFlag(policy.flag || countries[0]?.flag || '🇱🇧');
+    setWorkingHoursPerDay(policy.workingHoursPerDay || 8);
+
+    const matchedWf = workflows.find(
+      (w) => w.id === policy.approvalWorkflow || w.name === policy.approvalWorkflow
+    );
+    handleWorkflowChange(matchedWf?.id || workflows[0]?.id || policy.approvalWorkflow || '');
     setDivisionAssignment(policy.divisionAssignment || '');
     setWeekendDays(policy.weekendDays || [0, 6]);
 
@@ -225,13 +319,12 @@ export default function LeavePolicies() {
     setFormOpen(true);
   }
 
-  function handleCountrySelect(cCode: string) {
-    const found = countries.find((c) => c.code === cCode);
-    if (found) {
-      setCountryCode(found.code);
-      setCountryName(found.name);
-      setFlag(found.flag);
-    }
+  function handleCountrySelect(code: string) {
+    const found = countries.find((c) => c.code === code);
+    if (!found) return;
+    setCountryCode(found.code);
+    setCountryName(found.name);
+    setFlag(found.flag);
   }
 
   function handleWeekendToggle(dayIndex: number) {
@@ -265,21 +358,15 @@ export default function LeavePolicies() {
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
-    if (!policyName.trim()) newErrors.policyName = 'Policy Name is required';
-    if (!countryCode.trim()) newErrors.countryCode = 'Country selection is required';
-    if (!approvalWorkflow.trim()) newErrors.approvalWorkflow = 'Approval Workflow selection is required';
+    if (!policyName.trim()) {
+      newErrors.policyName = 'Policy Name is required';
+      newErrors.form = 'Policy Name is required.';
+    }
 
-    Object.values(quotasByTypeId).forEach((q) => {
-      if (q.isAccrued && (q.accrualRate ?? 0) <= 0) {
-        newErrors[`quota_${q.leaveType}_rate`] = `Accrual rate for ${q.leaveType} must be positive`;
-      }
-      if (q.carryOverEnabled && (q.maxCarryOver ?? 0) < 0) {
-        newErrors[`quota_${q.leaveType}_carry`] = `Max carry over for ${q.leaveType} cannot be negative`;
-      }
-      if (q.isCutOffDifferentFromHireDate && !q.cutOffDate?.trim()) {
-        newErrors[`quota_${q.leaveType}_cutoff`] = `Cut-off date for ${q.leaveType} is required`;
-      }
-    });
+    if (showSpecificPersonFields) {
+      if (!specificDeptId) newErrors.specificDept = 'Department is required for Specific Person approver';
+      if (!specificPersonId) newErrors.specificPerson = 'Person is required for Specific Person approver';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -292,20 +379,37 @@ export default function LeavePolicies() {
 
     setSaving(true);
     const finalQuotas = Object.values(quotasByTypeId);
+    const validWfId = approvalWorkflow || workflows[0]?.id || '';
+    const validCountryCode = countryCode || countries[0]?.code || 'LB';
+    const validCountryName = countryName || countries[0]?.name || 'Lebanon';
+
     const payload: Partial<CountryPolicy> = {
       id: editPol?.id,
-      policyName: policyName.trim(),
-      countryCode,
-      country: countryName,
-      flag,
-      workingHoursPerDay,
-      approvalWorkflow,
+      policyName: policyName.trim() || 'Custom Policy',
+      countryCode: validCountryCode,
+      country: validCountryName,
+      flag: flag || '🇱🇧',
+      workingHoursPerDay: workingHoursPerDay || 8,
+      approvalWorkflow: validWfId,
       divisionAssignment,
-      weekendDays,
+      weekendDays: weekendDays || [0, 6],
       leaveQuotas: finalQuotas,
     };
 
     try {
+      if (showSpecificPersonFields && selectedWorkflow) {
+        const chosenEmp = specificDeptActiveEmployees.find((e) => e.id === specificPersonId);
+        await updateApprovalWorkflow(selectedWorkflow.id, {
+          ...selectedWorkflow,
+          levels: [{
+            type: 'specific_employee',
+            departmentId: specificDeptId,
+            specificApproverEmployeeId: specificPersonId,
+            specificEmployeeEmail: chosenEmp?.email || '',
+          }],
+        });
+      }
+
       if (editPol && editPol.id) {
         await updatePolicy(editPol.id, payload);
       } else {
@@ -680,12 +784,12 @@ export default function LeavePolicies() {
                     </label>
                     <select
                       value={approvalWorkflow}
-                      onChange={(e) => setApprovalWorkflow(e.target.value)}
+                      onChange={(e) => handleWorkflowChange(e.target.value)}
                       className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                     >
-                      {workflows.map((w) => (
+                      {workflowOptions.map((w) => (
                         <option key={w.id} value={w.id}>
-                          {w.name}
+                          {workflowDisplayLabel(w)}
                         </option>
                       ))}
                     </select>
@@ -709,6 +813,72 @@ export default function LeavePolicies() {
                     </select>
                   </div>
                 </div>
+
+                {showSpecificPersonFields && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Department *
+                      </label>
+                      <select
+                        value={specificDeptId}
+                        onChange={(e) => {
+                          setSpecificDeptId(e.target.value);
+                          setSpecificPersonId('');
+                        }}
+                        className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
+                          errors.specificDept ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
+                        } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                      >
+                        <option value="">Select department...</option>
+                        {departmentOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.specificDept && (
+                        <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1">
+                          <AlertCircle size={10} /> {errors.specificDept}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Person *
+                      </label>
+                      <select
+                        value={specificPersonId}
+                        disabled={!specificDeptId}
+                        onChange={(e) => setSpecificPersonId(e.target.value)}
+                        className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
+                          errors.specificPerson ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
+                        } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {!specificDeptId ? (
+                          <option value="">Select a department first...</option>
+                        ) : specificDeptActiveEmployees.length === 0 ? (
+                          <option value="">No active employees found in this department</option>
+                        ) : (
+                          <>
+                            <option value="">Choose person...</option>
+                            {specificDeptActiveEmployees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.fullName} — {emp.jobTitle}
+                              </option>
+                            ))}
+                          </>
+                        )}
+                      </select>
+                      {errors.specificPerson && (
+                        <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1">
+                          <AlertCircle size={10} /> {errors.specificPerson}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
@@ -920,7 +1090,11 @@ export default function LeavePolicies() {
                             step="0.01"
                             min="0"
                             value={currentQuota.accrualRate || 0}
-                            onChange={(e) => handleCurrentQuotaChange('accrualRate', Math.max(0, Number(e.target.value)))}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(',', '.');
+                              const num = parseFloat(val);
+                              handleCurrentQuotaChange('accrualRate', isNaN(num) ? 0 : Math.max(0, num));
+                            }}
                             className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                           />
                         </div>
@@ -945,7 +1119,11 @@ export default function LeavePolicies() {
                             step="0.01"
                             min="0"
                             value={currentQuota.seniorityMilestones?.[0]?.accruedDays || 0}
-                            onChange={(e) => handleMilestoneChange('accruedDays', Math.max(0, Number(e.target.value)))}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(',', '.');
+                              const num = parseFloat(val);
+                              handleMilestoneChange('accruedDays', isNaN(num) ? 0 : Math.max(0, num));
+                            }}
                             className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                           />
                         </div>

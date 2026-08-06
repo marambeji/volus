@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, User, Users, CheckSquare, Calendar, Clock, X } from 'lucide-react';
+import { Home, User, Users, CheckSquare, Calendar, Clock, BarChart3, X } from 'lucide-react';
 
 interface NavbarProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ const sections = [
       { label: 'Home', path: '/employee/dashboard', icon: Home },
       { label: 'Approval Progress', path: '/employee/leave-tracking', icon: Clock },
       { label: 'Full Calendar', path: '/employee/full-calendar', icon: Calendar },
+      { label: 'Reports', path: '/employee/reports', icon: BarChart3 },
     ]
   },
   {
@@ -53,9 +54,8 @@ export default function Navbar({ isOpen, onClose }: NavbarProps) {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed inset-y-0 left-0 z-45 w-64 bg-[#111c44] text-slate-300 border-r border-[#1e306e]/20 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 z-45 w-64 bg-[#111c44] text-slate-300 border-r border-[#1e306e]/20 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 print:hidden ${isOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         {/* Sidebar Header (Logo + Mobile Close Button) */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-[#1e306e]/20 flex-shrink-0">
