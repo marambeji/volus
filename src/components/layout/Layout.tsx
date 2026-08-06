@@ -26,7 +26,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
   }, [darkMode]);
 
   const currentUser = JSON.parse(
-    localStorage.getItem('currentUser') || 
+    localStorage.getItem('currentUser') ||
     '{"name":"Gabriel Habre","email":"gabriel.habre@novelus.com","role":"employee","avatar":"GH"}'
   );
 
