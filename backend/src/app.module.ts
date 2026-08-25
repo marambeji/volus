@@ -19,6 +19,7 @@ import { LeaveRequestsModule } from './modules/leave-requests/leave-requests.mod
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { LeaveRemindersModule } from './modules/leave-reminders/leave-reminders.module';
+import { HrPermissionsModule } from './modules/hr-permissions/hr-permissions.module';
 
 import * as path from 'path';
 
@@ -49,6 +50,7 @@ import * as path from 'path';
     AuditLogsModule,
     ReportsModule,
     LeaveRemindersModule,
+    HrPermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

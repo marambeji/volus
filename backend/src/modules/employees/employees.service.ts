@@ -21,6 +21,7 @@ import { paginate } from '../../common/dto/pagination.dto';
 import { DirectoryEmployeeDto, PaginatedDirectoryResponse } from './dto/directory-employee.dto';
 import { EmployeeStatus, LeavePolicyStatus, LedgerTransactionType, AuditActionType } from '../../common/enums';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { HrPermissionsService } from '../hr-permissions/hr-permissions.service';
 
 @Injectable()
 export class EmployeesService {
@@ -39,6 +40,7 @@ export class EmployeesService {
     private readonly workflowRepo: Repository<ApprovalWorkflow>,
     private readonly auditLogsService: AuditLogsService,
     private readonly dataSource: DataSource,
+    private readonly hrPermissionsService: HrPermissionsService,
   ) {}
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -406,13 +408,17 @@ export class EmployeesService {
     if (employee.status !== EmployeeStatus.ACTIVE) {
       throw new BadRequestException(`Employee ${normalizedEmail} is not active`);
     }
-    
+
+    const isAdmin = employee.role === 'HR_ADMIN';
+
     return {
       id: employee.id,
       name: employee.fullName,
       email: employee.email,
-      role: employee.role === 'HR_ADMIN' ? 'admin' : (employee.role === 'MANAGER' ? 'manager' : 'employee'),
-      avatar: employee.avatar || employee.fullName.split(' ').map(n => n[0]).join('').toUpperCase()
+      role: isAdmin ? 'admin' : (employee.role === 'MANAGER' ? 'manager' : 'employee'),
+      avatar: employee.avatar || employee.fullName.split(' ').map(n => n[0]).join('').toUpperCase(),
+      isSuperAdmin: isAdmin ? employee.isSuperAdmin : false,
+      permissions: isAdmin ? await this.hrPermissionsService.getEffectivePermissions(employee.id) : undefined,
     };
   }
 

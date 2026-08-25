@@ -13,6 +13,7 @@ import { Division } from '../divisions/entities/division.entity';
 import { ApprovalWorkflow } from '../approval-workflows/entities/approval-workflow.entity';
 import { EmployeeStatus } from '../../common/enums';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { HrPermissionsService } from '../hr-permissions/hr-permissions.service';
 
 describe('EmployeesService Unit Tests', () => {
   let service: EmployeesService;
@@ -65,6 +66,10 @@ describe('EmployeesService Unit Tests', () => {
           },
         },
         { provide: DataSource, useValue: dataSource },
+        {
+          provide: HrPermissionsService,
+          useValue: { getEffectivePermissions: jest.fn().mockResolvedValue({}) },
+        },
       ],
     }).compile();
 
@@ -258,5 +263,38 @@ describe('EmployeesService Unit Tests', () => {
     expect(activeAssignment.effectiveTo).not.toBeNull();
     expect(emRemove).toHaveBeenCalledTimes(1);
     expect(emRemove).toHaveBeenCalledWith({ id: 'bal-unused' });
+  });
+
+  describe('devLogin', () => {
+    it('includes isSuperAdmin and permissions for an HR_ADMIN', async () => {
+      employeeRepo.findOne.mockResolvedValue({
+        id: 'e1',
+        fullName: 'HR Admin User',
+        email: 'admin@novelus.com',
+        role: 'HR_ADMIN',
+        status: EmployeeStatus.ACTIVE,
+        isSuperAdmin: true,
+        avatar: null,
+      });
+      const result = await service.devLogin('admin@novelus.com');
+      expect(result.role).toBe('admin');
+      expect(result.isSuperAdmin).toBe(true);
+      expect(result.permissions).toEqual({});
+    });
+
+    it('omits permissions for a non-admin employee', async () => {
+      employeeRepo.findOne.mockResolvedValue({
+        id: 'e2',
+        fullName: 'Gabriel Habre',
+        email: 'gabriel@novelus.com',
+        role: 'MANAGER',
+        status: EmployeeStatus.ACTIVE,
+        isSuperAdmin: false,
+        avatar: null,
+      });
+      const result = await service.devLogin('gabriel@novelus.com');
+      expect(result.isSuperAdmin).toBe(false);
+      expect(result.permissions).toBeUndefined();
+    });
   });
 });

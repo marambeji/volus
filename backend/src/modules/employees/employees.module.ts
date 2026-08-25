@@ -12,6 +12,7 @@ import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { HrPermissionsModule } from '../hr-permissions/hr-permissions.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
     ]),
     LeaveBalancesModule,
     AuditLogsModule,
+    HrPermissionsModule,
   ],
   controllers: [EmployeesController],
   providers: [EmployeesService],
