@@ -15,6 +15,7 @@ import { toAdminEmployee, toBackendEmployeePayload } from '../../services/mapper
 import { CANONICAL_DEPARTMENT_NAMES } from '../data/adminMockData';
 import { apiFetch } from '../../services/apiClient';
 import { getCountries, type CountryItem } from '../../services/countriesApi';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 const emptyForm = (): Omit<AdminEmployee, 'id'> => ({
   name: '',
@@ -55,7 +56,7 @@ export default function EmployeeList() {
   }, [search, filterDept, filterCountry, filterStatus]);
 
   useEffect(() => {
-    getCountries().then(setCountriesList).catch(() => {});
+    getCountries().then(list => setCountriesList(list || [])).catch(() => {});
   }, []);
 
   // Fetch who is on leave TODAY using the whos-out endpoint (same as WhosOut widget)
@@ -99,6 +100,7 @@ export default function EmployeeList() {
   const [viewEmp, setViewEmp] = useState<AdminEmployee | null>(null);
   const [editEmp, setEditEmp] = useState<AdminEmployee | null>(null);
   const [deleteId, setDeleteId] = useState<number | string | null>(null);
+  const { canManage } = useHrPermission('employees');
   const [confirmClearPolicy, setConfirmClearPolicy] = useState(false);
   const [historyTarget, setHistoryTarget] = useState<{ entityType: string; entityId: string; name: string } | null>(null);
   
@@ -265,9 +267,11 @@ export default function EmployeeList() {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Employee Management</h1>
           <p className="text-slate-400 text-sm mt-1">{filtered.length} of {state.employees.length} employees</p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-sm transition-colors cursor-pointer">
-          <Plus size={16} /> Add Employee
-        </button>
+        {canManage && (
+          <button onClick={openAdd} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-sm transition-colors cursor-pointer">
+            <Plus size={16} /> Add Employee
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -337,11 +341,15 @@ export default function EmployeeList() {
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => setHistoryTarget({ entityType: 'Employee', entityId: String(emp.id), name: emp.name })} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer" title="Audit History"><History size={14}/></button>
                         <button onClick={() => setViewEmp(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors cursor-pointer" title="View"><Eye size={14}/></button>
-                        <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer" title="Edit"><Edit2 size={14}/></button>
-                        <button onClick={() => toggleStatus(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer" title="Toggle Status">
-                          {emp.status === 'active' ? <Archive size={14}/> : <UserCheck size={14}/>}
-                        </button>
-                        <button onClick={() => setDeleteId(emp.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer" title="Delete"><Trash2 size={14}/></button>
+                        {canManage && (
+                          <>
+                            <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer" title="Edit"><Edit2 size={14}/></button>
+                            <button onClick={() => toggleStatus(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer" title="Toggle Status">
+                              {emp.status === 'active' ? <Archive size={14}/> : <UserCheck size={14}/>}
+                            </button>
+                            <button onClick={() => setDeleteId(emp.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer" title="Delete"><Trash2 size={14}/></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
