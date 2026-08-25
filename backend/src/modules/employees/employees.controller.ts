@@ -14,8 +14,12 @@ import {
   Headers,
   UnauthorizedException,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AdminGuard } from '../../common/guards/admin.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { EmployeesService } from './employees.service';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -38,18 +42,24 @@ export class EmployeesController {
   }
 
   @Post()
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('employees', 'manage')
   @ApiOperation({ summary: 'Create an employee with policy assignment' })
   create(@Body() dto: CreateEmployeeDto, @Headers('x-employee-id') actorId?: string) {
     return this.service.create(dto, actorId);
   }
 
   @Get('directory')
+  @UseGuards(PermissionGuard)
+  @RequireModule('employees', 'view')
   @ApiOperation({ summary: 'Get directory of active employees' })
   getDirectory(@Query() query: { page?: number; limit?: number; q?: string; department?: string }) {
     return this.service.getDirectory(query);
   }
 
   @Get()
+  @UseGuards(PermissionGuard)
+  @RequireModule('employees', 'view')
   @ApiOperation({
     summary: 'List employees with pagination, search, and filters',
   })
@@ -115,18 +125,24 @@ export class EmployeesController {
 
 
   @Get(':id')
+  @UseGuards(PermissionGuard)
+  @RequireModule('employees', 'view')
   @ApiOperation({ summary: 'Get employee detail by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.findOne(id);
   }
 
   @Get(':id/leave-configuration')
+  @UseGuards(PermissionGuard)
+  @RequireModule('employees', 'view')
   @ApiOperation({ summary: 'Get effective leave configuration for an employee' })
   getLeaveConfiguration(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.getLeaveConfiguration(id);
   }
 
   @Put(':id')
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('employees', 'manage')
   @ApiOperation({ summary: 'Update an employee and manage policy changes' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -137,6 +153,8 @@ export class EmployeesController {
   }
 
   @Delete(':id')
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('employees', 'manage')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft-delete an employee (archive)' })
   remove(@Param('id', ParseUUIDPipe) id: string, @Headers('x-employee-id') actorId?: string) {
