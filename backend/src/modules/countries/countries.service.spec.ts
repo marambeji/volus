@@ -21,6 +21,7 @@ describe('CountriesService', () => {
     getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
   };
 
+  beforeEach(async () => {
     const emQueryBuilder = {
       update: jest.fn().mockReturnThis(),
       delete: jest.fn().mockReturnThis(),
