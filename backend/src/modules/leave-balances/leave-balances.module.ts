@@ -8,6 +8,7 @@ import { LeaveBalancesService } from './leave-balances.service';
 import { LeaveBalancesController } from './leave-balances.controller';
 import { LeaveLedgerController } from './leave-ledger.controller';
 import { AccrualSchedulerService } from './accrual-scheduler.service';
+import { HrPermissionsModule } from '../hr-permissions/hr-permissions.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AccrualSchedulerService } from './accrual-scheduler.service';
       Employee,
       LeaveType,
     ]),
+    HrPermissionsModule,
   ],
   controllers: [LeaveBalancesController, LeaveLedgerController],
   providers: [LeaveBalancesService, AccrualSchedulerService],
