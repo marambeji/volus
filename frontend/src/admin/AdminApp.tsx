@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AdminProvider } from './store/AdminContext';
 import AdminLayout from './components/layout/AdminLayout';
+import { ProtectedRoute, SuperAdminRoute } from './components/ProtectedRoute';
 import AdminDashboard from './pages/AdminDashboard';
 import EmployeeList from './pages/EmployeeList';
 import LeaveRequests from './pages/LeaveRequests';
@@ -16,6 +17,7 @@ import ApprovalLevels from './pages/ApprovalLevels';
 import AccrualHistory from './pages/AccrualHistory';
 import Countries from './pages/Countries';
 import NotificationManager from './pages/NotificationManager';
+import HRPermissions from './pages/HRPermissions';
 
 export default function AdminApp({ onLogout }: { onLogout?: () => void }) {
   return (
@@ -24,19 +26,20 @@ export default function AdminApp({ onLogout }: { onLogout?: () => void }) {
         <Routes>
           <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/dashboard" element={<AdminDashboard />} />
-          <Route path="/employees" element={<EmployeeList />} />
-          <Route path="/leaves" element={<LeaveRequests />} />
-          <Route path="/balances" element={<BalanceManagement />} />
-          <Route path="/accrual-history" element={<AccrualHistory />} />
-          <Route path="/policies" element={<LeavePolicies />} />
-          <Route path="/approval-levels" element={<ApprovalLevels />} />
-          <Route path="/countries" element={<Countries />} />
-          <Route path="/holidays" element={<PublicHolidays />} />
-          <Route path="/departments" element={<Departments />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/audit" element={<AuditLog />} />
-          <Route path="/notifications" element={<Notifications />} />
-          <Route path="/reminders" element={<NotificationManager />} />
+          <Route path="/employees" element={<ProtectedRoute module="employees"><EmployeeList /></ProtectedRoute>} />
+          <Route path="/leaves" element={<ProtectedRoute module="leaveRequests"><LeaveRequests /></ProtectedRoute>} />
+          <Route path="/balances" element={<ProtectedRoute module="leaveBalances"><BalanceManagement /></ProtectedRoute>} />
+          <Route path="/accrual-history" element={<ProtectedRoute module="accrualHistory"><AccrualHistory /></ProtectedRoute>} />
+          <Route path="/policies" element={<ProtectedRoute module="leavePolicies"><LeavePolicies /></ProtectedRoute>} />
+          <Route path="/approval-levels" element={<ProtectedRoute module="approvalLevels"><ApprovalLevels /></ProtectedRoute>} />
+          <Route path="/countries" element={<ProtectedRoute module="countries"><Countries /></ProtectedRoute>} />
+          <Route path="/holidays" element={<ProtectedRoute module="publicHolidays"><PublicHolidays /></ProtectedRoute>} />
+          <Route path="/departments" element={<ProtectedRoute module="departments"><Departments /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute module="reports"><Reports /></ProtectedRoute>} />
+          <Route path="/audit" element={<ProtectedRoute module="auditLog"><AuditLog /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute module="notifications"><Notifications /></ProtectedRoute>} />
+          <Route path="/reminders" element={<ProtectedRoute module="notificationManager"><NotificationManager /></ProtectedRoute>} />
+          <Route path="/hr-permissions" element={<SuperAdminRoute><HRPermissions /></SuperAdminRoute>} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Routes>
