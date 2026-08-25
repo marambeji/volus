@@ -10,12 +10,16 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PoliciesService } from './policies.service';
 import { CreatePolicyDto } from './dto/create-policy.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
 import { PolicyQueryDto } from './dto/policy-query.dto';
+import { AdminGuard } from '../../common/guards/admin.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('Leave Policies')
 @Controller({ path: 'policies', version: '1' })
@@ -23,6 +27,8 @@ export class PoliciesController {
   constructor(private readonly service: PoliciesService) {}
 
   @Post()
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('leavePolicies', 'manage')
   @ApiOperation({
     summary: 'Create a leave policy with rules and milestones (atomic)',
   })
@@ -31,6 +37,8 @@ export class PoliciesController {
   }
 
   @Get()
+  @UseGuards(PermissionGuard)
+  @RequireModule('leavePolicies', 'view')
   @ApiOperation({
     summary: 'List policies with pagination, search, and filters',
   })
@@ -39,6 +47,8 @@ export class PoliciesController {
   }
 
   @Get(':id')
+  @UseGuards(PermissionGuard)
+  @RequireModule('leavePolicies', 'view')
   @ApiOperation({
     summary: 'Get full policy detail (frontend-compatible shape)',
   })
@@ -47,6 +57,8 @@ export class PoliciesController {
   }
 
   @Put(':id')
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('leavePolicies', 'manage')
   @ApiOperation({
     summary: 'Update policy atomically (replaces rules/milestones)',
   })
@@ -55,6 +67,8 @@ export class PoliciesController {
   }
 
   @Delete(':id')
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('leavePolicies', 'manage')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft-delete a policy' })
   remove(@Param('id', ParseUUIDPipe) id: string) {

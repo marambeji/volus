@@ -10,6 +10,7 @@ import { DivisionsModule } from '../divisions/divisions.module';
 import { ApprovalWorkflowsModule } from '../approval-workflows/approval-workflows.module';
 import { LeaveTypesModule } from '../leave-types/leave-types.module';
 import { EmployeesModule } from '../employees/employees.module';
+import { HrPermissionsModule } from '../hr-permissions/hr-permissions.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { EmployeesModule } from '../employees/employees.module';
     ApprovalWorkflowsModule,
     LeaveTypesModule,
     EmployeesModule,
+    HrPermissionsModule,
   ],
   controllers: [PoliciesController],
   providers: [PoliciesService],
