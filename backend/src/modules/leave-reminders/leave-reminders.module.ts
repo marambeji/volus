@@ -8,6 +8,7 @@ import { LeaveRemindersSchedulerService } from './leave-reminders-scheduler.serv
 import { MailModule } from '../mail/mail.module';
 import { LeaveRequestsModule } from '../leave-requests/leave-requests.module';
 import { EmployeesModule } from '../employees/employees.module';
+import { HrPermissionsModule } from '../hr-permissions/hr-permissions.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { EmployeesModule } from '../employees/employees.module';
     LeaveRequestsModule,
     EmployeesModule,
     MailModule,
+    HrPermissionsModule,
   ],
   controllers: [LeaveRemindersController],
   providers: [LeaveRemindersService, LeaveRemindersSchedulerService],

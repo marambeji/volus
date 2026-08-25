@@ -9,6 +9,8 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuditLogsService } from './audit-logs.service';
 import { AdminGuard } from '../../common/guards/admin.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { AuditActionType } from '../../common/enums';
 
 @ApiTags('Audit Logs')
@@ -35,7 +37,8 @@ export class AuditLogsController {
   }
 
   @Get('global')
-  @UseGuards(AdminGuard)
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('auditLog', 'view')
   @ApiOperation({ summary: 'Get all audit logs (HR only)' })
   findAll(
     @Query('entityType') entityType?: string,

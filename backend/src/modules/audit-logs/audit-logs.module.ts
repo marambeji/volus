@@ -4,10 +4,11 @@ import { AuditLog } from './entities/audit-log.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { AuditLogsService } from './audit-logs.service';
 import { AuditLogsController } from './audit-logs.controller';
+import { HrPermissionsModule } from '../hr-permissions/hr-permissions.module';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([AuditLog, Employee])],
+  imports: [TypeOrmModule.forFeature([AuditLog, Employee]), HrPermissionsModule],
   controllers: [AuditLogsController],
   providers: [AuditLogsService],
   exports: [AuditLogsService, TypeOrmModule],
