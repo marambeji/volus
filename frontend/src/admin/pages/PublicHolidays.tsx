@@ -13,6 +13,7 @@ import {
 } from '../../services/holidaysApi';
 import type { FrontendHoliday } from '../../services/mappers/holidayMapper';
 import { ApiError } from '../../services/apiClient';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 const emptyForm = (defaultCountryId = '') => ({
   name: '',
@@ -43,6 +44,7 @@ const MONTH_COLORS = [
 ];
 
 export default function PublicHolidays() {
+  const { canManage } = useHrPermission('publicHolidays');
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [holidays, setHolidays] = useState<FrontendHoliday[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,13 +198,15 @@ export default function PublicHolidays() {
           </div>
           <p className="text-slate-400 text-sm mt-1">Manage non-working days by country</p>
         </div>
-        <button
-          onClick={openAdd}
-          disabled={Boolean(apiError) || loading}
-          className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-400 text-white font-bold px-5 py-2.5 rounded-xl text-sm shadow-lg transition-all cursor-pointer"
-        >
-          <Plus size={16} /> Add Holiday
-        </button>
+        {canManage && (
+          <button
+            onClick={openAdd}
+            disabled={Boolean(apiError) || loading}
+            className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-400 text-white font-bold px-5 py-2.5 rounded-xl text-sm shadow-lg transition-all cursor-pointer"
+          >
+            <Plus size={16} /> Add Holiday
+          </button>
+        )}
       </div>
 
       {/* ── Stats Row ─────────────────────────────────────────────────── */}
@@ -349,22 +353,24 @@ export default function PublicHolidays() {
                         )}
 
                         {/* Actions */}
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => openEdit(h)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors cursor-pointer"
-                            title="Edit"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            onClick={() => setDeleteId(h.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
+                        {canManage && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => openEdit(h)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors cursor-pointer"
+                              title="Edit"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              onClick={() => setDeleteId(h.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                              title="Delete"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -20,10 +20,12 @@ import {
   type ReminderHistoryEntry,
 } from '../../services/remindersApi';
 import { ApiError } from '../../services/apiClient';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 const DELAY_PRESETS = [24, 48, 72];
 
 export default function NotificationManager() {
+  const { canManage } = useHrPermission('notificationManager');
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
   const [history, setHistory] = useState<ReminderHistoryEntry[]>([]);
   const [enabled, setEnabled] = useState(true);
@@ -220,24 +222,28 @@ export default function NotificationManager() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={() => void handleSave()}
-                disabled={saving || !isDirty}
-                className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-violet-600/20 cursor-pointer"
-              >
-                {saving && <RefreshCw size={14} className="animate-spin" />}
-                Save Settings
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleRunNow()}
-                disabled={running}
-                className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-sm transition-all cursor-pointer"
-              >
-                {running ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                Run Check Now
-              </button>
+              {canManage && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    disabled={saving || !isDirty}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-violet-600/20 cursor-pointer"
+                  >
+                    {saving && <RefreshCw size={14} className="animate-spin" />}
+                    Save Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRunNow()}
+                    disabled={running}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-sm transition-all cursor-pointer"
+                  >
+                    {running ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                    Run Check Now
+                  </button>
+                </>
+              )}
 
               {saveMessage && (
                 <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-bold">

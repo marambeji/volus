@@ -25,6 +25,7 @@ import {
 import { ApiError } from '../../services/apiClient';
 import type { ApprovalConfiguration } from '../types/adminTypes';
 import { CANONICAL_DEPARTMENT_NAMES } from '../data/adminMockData';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -97,6 +98,7 @@ const defaultQuotaForType = (typeKey: string, typeId?: string, defaultWorkflowId
 };
 
 export default function LeavePolicies() {
+  const { canManage } = useHrPermission('leavePolicies');
   const [policies, setPolicies] = useState<CountryPolicy[]>([]);
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [divisions, setDivisions] = useState<DivisionItem[]>([]);
@@ -466,13 +468,15 @@ export default function LeavePolicies() {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Leave Policies</h1>
           <p className="text-slate-400 text-sm mt-1">Configure leave rules, accrual intervals, and weekends by country</p>
         </div>
-        <button
-          onClick={openAdd}
-          disabled={Boolean(apiError) || loading}
-          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors cursor-pointer"
-        >
-          <Plus size={16} /> Add Policy
-        </button>
+        {canManage && (
+          <button
+            onClick={openAdd}
+            disabled={Boolean(apiError) || loading}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors cursor-pointer"
+          >
+            <Plus size={16} /> Add Policy
+          </button>
+        )}
       </div>
 
       {/* Backend error banner */}
@@ -545,26 +549,30 @@ export default function LeavePolicies() {
                     >
                       <Eye size={13} />
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEdit(policy);
-                      }}
-                      className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-violet-600 rounded-xl transition-colors cursor-pointer"
-                      title="Edit Policy"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteId(policy.id);
-                      }}
-                      className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
-                      title="Delete"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {canManage && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(policy);
+                          }}
+                          className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-violet-600 rounded-xl transition-colors cursor-pointer"
+                          title="Edit Policy"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteId(policy.id);
+                          }}
+                          className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1386,13 +1394,15 @@ export default function LeavePolicies() {
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsViewOnly(false)}
-                  className="flex-1 py-2.5 text-sm font-bold text-white bg-violet-600 rounded-xl hover:bg-violet-700 cursor-pointer flex justify-center items-center gap-2"
-                >
-                  <Edit2 size={14} /> Edit Policy
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => setIsViewOnly(false)}
+                    className="flex-1 py-2.5 text-sm font-bold text-white bg-violet-600 rounded-xl hover:bg-violet-700 cursor-pointer flex justify-center items-center gap-2"
+                  >
+                    <Edit2 size={14} /> Edit Policy
+                  </button>
+                )}
               </>
             ) : (
               <>

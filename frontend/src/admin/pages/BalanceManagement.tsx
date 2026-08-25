@@ -8,6 +8,7 @@ import HistoryDrawer from '../components/HistoryDrawer';
 import SlideDrawer from '../components/ui/SlideDrawer';
 import { adjustBalance, getLedgerEntries, type AccrualHistoryRow } from '../../services/balancesApi';
 import { apiFetch } from '../../services/apiClient';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 interface BalanceItem {
   leaveTypeId: string;
@@ -30,6 +31,7 @@ interface CalculatedResponse {
 
 export default function BalanceManagement() {
   const { state, dispatch } = useAdmin();
+  const { canManage } = useHrPermission('leaveBalances');
   const [search, setSearch] = useState('');
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
   const [filterYear, setFilterYear] = useState('2026');
@@ -346,16 +348,18 @@ export default function BalanceManagement() {
                           <span className="font-bold text-slate-600 dark:text-slate-300">{b.entitlement}d</span> entitlement · {b.used}d used
                           {b.pending > 0 ? ` · ${b.pending}d pending` : ''}
                         </p>
-                        <button
-                          onClick={() => {
-                            setAdjustModal({ empId: String(activeEmp.id), leaveTypeId: b.leaveTypeId, typeName: b.name });
-                            setAdjustReason('');
-                            setAdjustVal(0);
-                          }}
-                          className="w-full bg-white dark:bg-slate-600 border border-slate-200 dark:border-slate-500 text-slate-600 dark:text-slate-300 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-500 transition-colors"
-                        >
-                          <Plus size={10}/> <Minus size={10}/> Adjust Balance
-                        </button>
+                        {canManage && (
+                          <button
+                            onClick={() => {
+                              setAdjustModal({ empId: String(activeEmp.id), leaveTypeId: b.leaveTypeId, typeName: b.name });
+                              setAdjustReason('');
+                              setAdjustVal(0);
+                            }}
+                            className="w-full bg-white dark:bg-slate-600 border border-slate-200 dark:border-slate-500 text-slate-600 dark:text-slate-300 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-500 transition-colors"
+                          >
+                            <Plus size={10}/> <Minus size={10}/> Adjust Balance
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -8,9 +8,11 @@ import SlideDrawer from '../components/ui/SlideDrawer';
 import HistoryDrawer from '../components/HistoryDrawer';
 import { hrGetLeaveRequests, hrApproveLeaveRequest, hrRejectLeaveRequest, hrDeleteLeaveRequest } from '../../services/adminApi';
 import Pagination from '../../components/ui/Pagination';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 export default function LeaveRequests() {
   const {} = useAdmin();
+  const { canManage } = useHrPermission('leaveRequests');
   
   // Search & Filters
   const [search, setSearch] = useState('');
@@ -250,7 +252,7 @@ export default function LeaveRequests() {
                         ) : (
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={() => setHistoryTarget({ entityType: 'LeaveRequest', entityId: req.requestId, name: `${req.employeeName} Request` })} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer" title="Audit History"><History size={14}/></button>
-                            {req.canApprove ? (
+                            {canManage && req.canApprove ? (
                               <>
                                 <button onClick={() => handleApprove(req.requestId)} className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 cursor-pointer" title="Approve"><Check size={14}/></button>
                                 <button onClick={() => { setRejectId(req.requestId); setRejectComment(''); }} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer" title="Reject"><X size={14}/></button>
@@ -260,7 +262,7 @@ export default function LeaveRequests() {
                                 Waiting for Manager approval
                               </span>
                             ) : null}
-                            {req.currentStatus !== 'DELETED_BY_HR' && (
+                            {canManage && req.currentStatus !== 'DELETED_BY_HR' && (
                               <button onClick={() => { setDeleteId(req.requestId); setDeleteReason(''); }} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer" title="Delete Request"><Trash2 size={14}/></button>
                             )}
                           </div>
@@ -318,13 +320,13 @@ export default function LeaveRequests() {
               {selected.deletionReason && <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-3"><p className="text-[10px] font-bold text-red-500 uppercase mb-1">Deleted by HR — Reason</p><p className="text-sm text-red-700 dark:text-red-300">{selected.deletionReason}</p></div>}
               {selected.hrNote && <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800 rounded-xl p-3"><p className="text-[10px] font-bold text-violet-500 uppercase mb-1">HR Note</p><p className="text-sm text-violet-700 dark:text-violet-300">{selected.hrNote}</p></div>}
 
-              {selected.canApprove && (
+              {canManage && selected.canApprove && (
                 <div className="flex gap-3">
                   <button onClick={() => { handleApprove(selected.requestId); setSelected(null); }} className="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-emerald-700 cursor-pointer flex items-center justify-center gap-2"><Check size={15}/>Approve</button>
                   <button onClick={() => { setRejectId(selected.requestId); setRejectComment(''); setSelected(null); }} className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-red-700 cursor-pointer flex items-center justify-center gap-2"><X size={15}/>Reject</button>
                 </div>
               )}
-              {selected.currentStatus !== 'DELETED_BY_HR' && (
+              {canManage && selected.currentStatus !== 'DELETED_BY_HR' && (
                 <button onClick={() => { setDeleteId(selected.requestId); setDeleteReason(''); setSelected(null); }} className="w-full bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900 text-red-600 font-bold py-2.5 rounded-xl text-sm hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer flex items-center justify-center gap-2"><Trash2 size={15}/>Delete Request</button>
               )}
             </div>

@@ -17,6 +17,7 @@ import { getEmployees, type BackendEmployee } from '../../services/employeesApi'
 import { getDivisions, type DivisionItem } from '../../services/divisionsApi';
 import { getDepartments, type DepartmentItem } from '../../services/departmentsApi';
 import { ApiError } from '../../services/apiClient';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 const emptyLevel: ApprovalLevel = { type: 'manager' };
 
@@ -33,6 +34,7 @@ const emptyForm = (): ApprovalConfiguration => ({
 });
 
 export default function ApprovalLevels() {
+  const { canManage } = useHrPermission('approvalLevels');
   const [workflows, setWorkflows] = useState<ApprovalConfiguration[]>([]);
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeItem[]>([]);
@@ -245,13 +247,15 @@ export default function ApprovalLevels() {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Approval Workflows</h1>
           <p className="text-sm text-slate-400 mt-1">Configure multi-stage approval workflows for leave requests</p>
         </div>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-violet-600/20 cursor-pointer"
-        >
-          <Plus size={18} />
-          Add Configuration
-        </button>
+        {canManage && (
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-violet-600/20 cursor-pointer"
+          >
+            <Plus size={18} />
+            Add Configuration
+          </button>
+        )}
       </div>
 
       {apiError && (
@@ -331,6 +335,7 @@ export default function ApprovalLevels() {
                       >
                         <History size={15} />
                       </button>
+                      {canManage && (
                       <button
                         onClick={() => openEdit(config)}
                         className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
@@ -338,6 +343,8 @@ export default function ApprovalLevels() {
                       >
                         <Edit2 size={15} />
                       </button>
+                      )}
+                      {canManage && (
                       <button
                         onClick={() => setDeleteId(config.id)}
                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
@@ -345,6 +352,7 @@ export default function ApprovalLevels() {
                       >
                         <Trash2 size={15} />
                       </button>
+                      )}
                     </div>
                   </div>
 

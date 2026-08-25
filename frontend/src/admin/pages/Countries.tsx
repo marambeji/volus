@@ -12,10 +12,12 @@ import {
 import type { CountryItem, CountryPayload } from '../../services/countriesApi';
 import { ApiError } from '../../services/apiClient';
 import type { WorldCountry } from '../../data/countriesList';
+import { useHrPermission } from '../utils/useHrPermissions';
 
 const emptyForm = (): CountryPayload => ({ name: '', code: '', flag: '' });
 
 export default function Countries() {
+  const { canManage } = useHrPermission('countries');
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -197,12 +199,14 @@ export default function Countries() {
             </p>
           </div>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg cursor-pointer active:scale-95 shrink-0"
-        >
-          <Plus size={18} /> Add Country
-        </button>
+        {canManage && (
+          <button
+            onClick={openCreate}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg cursor-pointer active:scale-95 shrink-0"
+          >
+            <Plus size={18} /> Add Country
+          </button>
+        )}
       </div>
 
       {/* Controls Bar: Search & Stats */}
@@ -267,20 +271,24 @@ export default function Countries() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => openEdit(c)}
-                          className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/50 rounded-xl transition-all cursor-pointer"
-                          title="Edit Country"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteItem(c)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-all cursor-pointer"
-                          title="Delete Country"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={() => openEdit(c)}
+                              className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/50 rounded-xl transition-all cursor-pointer"
+                              title="Edit Country"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => setDeleteItem(c)}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-all cursor-pointer"
+                              title="Delete Country"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
