@@ -14,6 +14,8 @@ import {
 import { LeaveRequestsService } from './leave-requests.service';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('Leave Requests')
 @Controller({ path: 'leave-requests', version: '1' })
@@ -73,7 +75,8 @@ export class LeaveRequestsController {
   }
 
   @Get('hr')
-  @UseGuards(AdminGuard)
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('leaveRequests', 'view')
   @ApiOperation({ summary: 'Get all leave requests for HR' })
   hrFindAll(
     @Headers('x-employee-id') actorId: string,
@@ -83,7 +86,8 @@ export class LeaveRequestsController {
   }
 
   @Put('hr/:id/approve')
-  @UseGuards(AdminGuard)
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('leaveRequests', 'manage')
   @ApiOperation({ summary: 'Approve a leave request directly (HR Override)' })
   hrApprove(
     @Headers('x-employee-id') reviewerId: string,
@@ -94,7 +98,8 @@ export class LeaveRequestsController {
   }
 
   @Put('hr/:id/reject')
-  @UseGuards(AdminGuard)
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('leaveRequests', 'manage')
   @ApiOperation({ summary: 'Reject a leave request directly (HR Override)' })
   hrReject(
     @Headers('x-employee-id') reviewerId: string,
@@ -106,7 +111,8 @@ export class LeaveRequestsController {
   }
 
   @Put('hr/:id/delete')
-  @UseGuards(AdminGuard)
+  @UseGuards(AdminGuard, PermissionGuard)
+  @RequireModule('leaveRequests', 'manage')
   @ApiOperation({ summary: 'HR deletes a leave request regardless of status; kept visible as DELETED_BY_HR' })
   hrDelete(
     @Headers('x-employee-id') actorId: string,

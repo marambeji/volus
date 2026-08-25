@@ -3,6 +3,10 @@ import { LeaveRequestsController } from './leave-requests.controller';
 import { LeaveRequestsService } from './leave-requests.service';
 import { DataSource } from 'typeorm';
 import { AdminGuard } from '../../common/guards/admin.guard';
+import { Reflector } from '@nestjs/core';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { HrPermissionsService } from '../hr-permissions/hr-permissions.service';
+import { REQUIRE_MODULE_KEY } from '../../common/decorators/require-module.decorator';
 
 describe('LeaveRequestsController', () => {
   let controller: LeaveRequestsController;
@@ -29,6 +33,9 @@ describe('LeaveRequestsController', () => {
           useValue: {},
         },
         AdminGuard,
+        PermissionGuard,
+        Reflector,
+        { provide: HrPermissionsService, useValue: {} },
       ],
     }).compile();
 
@@ -37,5 +44,10 @@ describe('LeaveRequestsController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('requires view permission on hrFindAll', () => {
+    const meta = Reflect.getMetadata(REQUIRE_MODULE_KEY, controller.hrFindAll);
+    expect(meta).toEqual({ module: 'leaveRequests', level: 'view' });
   });
 });
