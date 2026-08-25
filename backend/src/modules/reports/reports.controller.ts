@@ -1,6 +1,8 @@
-import { Controller, Get, Headers, Query } from '@nestjs/common';
+import { Controller, Get, Headers, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('Reports')
 @Controller({ path: 'reports', version: '1' })
@@ -8,6 +10,8 @@ export class ReportsController {
   constructor(private readonly service: ReportsService) {}
 
   @Get('requests')
+  @UseGuards(PermissionGuard)
+  @RequireModule('reports', 'view')
   @ApiOperation({
     summary:
       'Leave requests report, scoped server-side by caller role (HR_ADMIN: company-wide, MANAGER: direct reports, EMPLOYEE: self only)',
@@ -20,6 +24,8 @@ export class ReportsController {
   }
 
   @Get('balances')
+  @UseGuards(PermissionGuard)
+  @RequireModule('reports', 'view')
   @ApiOperation({
     summary: 'Leave balances report, scoped server-side by caller role',
   })
@@ -31,6 +37,8 @@ export class ReportsController {
   }
 
   @Get('overlaps')
+  @UseGuards(PermissionGuard)
+  @RequireModule('reports', 'view')
   @ApiOperation({
     summary:
       'Overlapping approved leave report, scoped server-side by caller role (not available to EMPLOYEE callers)',
