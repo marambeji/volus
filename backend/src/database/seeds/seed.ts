@@ -245,6 +245,11 @@ async function seed() {
       }
     }
 
+    // Grant Super Admin to the primary seeded HR Admin
+    await qr.query(
+      `UPDATE employees SET is_super_admin = true WHERE email = 'admin@novelus.com'`,
+    );
+
     await qr.commitTransaction();
     console.log('\n✅ Seed completed successfully.');
   } catch (err) {

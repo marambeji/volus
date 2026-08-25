@@ -120,6 +120,9 @@ export class Employee {
   })
   role: EmployeeRole;
 
+  @Column({ name: 'is_super_admin', type: 'boolean', default: false })
+  isSuperAdmin: boolean;
+
   @Column({ name: 'hire_date', type: 'date' })
   hireDate: string;
 
