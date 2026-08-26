@@ -122,7 +122,7 @@ export async function getMyLeaveBalances(
 }
 
 export async function submitLeaveRequest(
-  payload: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; reason?: string }
+  payload: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; dayPortion?: 'FULL_DAY' | 'FIRST_HALF' | 'SECOND_HALF'; reason?: string }
 ): Promise<any> {
   return apiFetch<any>(`/leave-requests`, {
     method: 'POST',

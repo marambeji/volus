@@ -23,6 +23,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
   const [dailyAmounts, setDailyAmounts] = useState<DailyAmounts>({});
+  const [dayPortion, setDayPortion] = useState<'FULL_DAY' | 'FIRST_HALF' | 'SECOND_HALF'>('FULL_DAY');
   const [submitted, setSubmitted] = useState(false);
 
   // Calendar shown month/year state
@@ -129,6 +130,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
       setConfig(null);
       setSelectedHolidayIds([]);
       setHolidays([]);
+      setDayPortion('FULL_DAY');
     }
   }, [isOpen]);
 
@@ -177,6 +179,18 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
     }
     setDailyAmounts(tempDaily);
   }, [startDate, endDate]);
+
+  const isSingleDay = !!startDate && !!endDate && startDate === endDate;
+  const isHalfDaySelected = isSingleDay && dailyAmounts[startDate] === 0.5;
+
+  useEffect(() => {
+    if (!isHalfDaySelected && dayPortion !== 'FULL_DAY') {
+      setDayPortion('FULL_DAY');
+    } else if (isHalfDaySelected && dayPortion === 'FULL_DAY') {
+      setDayPortion('FIRST_HALF');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHalfDaySelected]);
 
   // Real balances return a lowercase code (e.g. "public_holiday"); only the
   // synthetic fallback entry above (for a leave type with no balance yet)
@@ -344,6 +358,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
           startDate,
           endDate,
           durationDays: totalDays,
+          dayPortion: isHalfDaySelected ? dayPortion : 'FULL_DAY',
           reason,
         });
       }
@@ -759,6 +774,36 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
                           <div className="mt-2 text-right text-xs font-semibold text-slate-600">
                             Total Chargeable Days: <span className="text-[#1b2559] text-base">{totalDays}</span>
                           </div>
+
+                          {isHalfDaySelected && (
+                            <div className="mt-3">
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">Half Day Period</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setDayPortion('FIRST_HALF')}
+                                  className={`py-2 text-xs font-bold rounded-xl border transition-colors cursor-pointer ${
+                                    dayPortion === 'FIRST_HALF'
+                                      ? 'bg-[#1b2559] text-white border-[#1b2559]'
+                                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  First Half (AM)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDayPortion('SECOND_HALF')}
+                                  className={`py-2 text-xs font-bold rounded-xl border transition-colors cursor-pointer ${
+                                    dayPortion === 'SECOND_HALF'
+                                      ? 'bg-[#1b2559] text-white border-[#1b2559]'
+                                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  Second Half (PM)
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </>
