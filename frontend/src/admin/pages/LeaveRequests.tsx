@@ -10,6 +10,12 @@ import { hrGetLeaveRequests, hrApproveLeaveRequest, hrRejectLeaveRequest, hrDele
 import Pagination from '../../components/ui/Pagination';
 import { useHrPermission } from '../utils/useHrPermissions';
 
+function dayPortionLabel(dayPortion?: string): string | null {
+  if (dayPortion === 'FIRST_HALF') return 'First Half';
+  if (dayPortion === 'SECOND_HALF') return 'Second Half';
+  return null;
+}
+
 export default function LeaveRequests() {
   const {} = useAdmin();
   const { canManage } = useHrPermission('leaveRequests');
@@ -212,7 +218,14 @@ export default function LeaveRequests() {
                       <td className="py-3.5 px-4 text-xs text-slate-500">
                         {new Date(req.startDate).toLocaleDateString('en-GB')} → {new Date(req.endDate).toLocaleDateString('en-GB')}
                       </td>
-                      <td className="py-3.5 px-4 text-center font-bold text-slate-700 dark:text-slate-300 text-xs">{req.requestedDuration}</td>
+                      <td className="py-3.5 px-4 text-center font-bold text-slate-700 dark:text-slate-300 text-xs">
+                        {req.requestedDuration}
+                        {dayPortionLabel(req.dayPortion) && (
+                          <span className="block mt-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-600 dark:text-violet-400">
+                            {dayPortionLabel(req.dayPortion)}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-4 text-center"><StatusBadge status={req.currentStatus.toLowerCase() as any} /></td>
                       <td className="py-3.5 px-4" onClick={e => e.stopPropagation()}>
                         {deleteId === req.requestId ? (
@@ -305,7 +318,7 @@ export default function LeaveRequests() {
                   ['Status', selected.currentStatus],
                   ['Start Date', new Date(selected.startDate).toLocaleDateString('en-GB')],
                   ['End Date', new Date(selected.endDate).toLocaleDateString('en-GB')],
-                  ['Total Days', `${selected.requestedDuration} days`],
+                  ['Total Days', `${selected.requestedDuration} days${dayPortionLabel(selected.dayPortion) ? ' (' + dayPortionLabel(selected.dayPortion) + ')' : ''}`],
                   ['Submitted', new Date(selected.submittedAt).toLocaleDateString('en-GB')],
                 ].map(([k, v]) => (
                   <div key={k} className="bg-slate-50 dark:bg-slate-700 rounded-xl p-3">
