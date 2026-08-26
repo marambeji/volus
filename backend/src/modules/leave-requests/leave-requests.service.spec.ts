@@ -14,7 +14,9 @@ import {
   EmployeeRole,
   LeaveRequestStatus,
   LedgerTransactionType,
+  DayPortion,
 } from '../../common/enums';
+import { LeaveRule } from '../policies/entities/leave-rule.entity';
 import { BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 
 describe('LeaveRequestsService - Sequential Approval Authorization & Multi-Level Workflows', () => {
@@ -480,5 +482,93 @@ describe('LeaveRequestsService.getCalendarData', () => {
 
     expect(result.scope).toBe('all');
     expect(result.employees).toHaveLength(3);
+  });
+});
+
+describe('LeaveRequestsService - validateDayPortion', () => {
+  let service: LeaveRequestsService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LeaveRequestsService,
+        { provide: getRepositoryToken(LeaveRequest), useValue: {} },
+        { provide: getRepositoryToken(ApprovalInstance), useValue: {} },
+        { provide: LeaveBalancesService, useValue: {} },
+        { provide: ApprovalWorkflowsService, useValue: {} },
+        { provide: AuditLogsService, useValue: {} },
+        { provide: DataSource, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get<LeaveRequestsService>(LeaveRequestsService);
+  });
+
+  const baseDto = {
+    startDate: '2026-09-10',
+    endDate: '2026-09-10',
+    durationDays: 0.5,
+  };
+  const allowingRule = { allowsHalfDay: true } as LeaveRule;
+  const forbiddingRule = { allowsHalfDay: false } as LeaveRule;
+
+  it('defaults to FULL_DAY when dayPortion is omitted, regardless of the rule', () => {
+    const result = (service as any).validateDayPortion(
+      { startDate: '2026-09-10', endDate: '2026-09-12', durationDays: 3 },
+      forbiddingRule,
+    );
+    expect(result).toBe(DayPortion.FULL_DAY);
+  });
+
+  it('accepts FIRST_HALF for a single 0.5-day request when the rule allows half days', () => {
+    const result = (service as any).validateDayPortion(
+      { ...baseDto, dayPortion: DayPortion.FIRST_HALF },
+      allowingRule,
+    );
+    expect(result).toBe(DayPortion.FIRST_HALF);
+  });
+
+  it('accepts SECOND_HALF for a single 0.5-day request when the rule allows half days', () => {
+    const result = (service as any).validateDayPortion(
+      { ...baseDto, dayPortion: DayPortion.SECOND_HALF },
+      allowingRule,
+    );
+    expect(result).toBe(DayPortion.SECOND_HALF);
+  });
+
+  it('rejects a half-day portion spanning more than one day', () => {
+    expect(() =>
+      (service as any).validateDayPortion(
+        { startDate: '2026-09-10', endDate: '2026-09-11', durationDays: 0.5, dayPortion: DayPortion.FIRST_HALF },
+        allowingRule,
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects a half-day portion when durationDays is not 0.5', () => {
+    expect(() =>
+      (service as any).validateDayPortion(
+        { ...baseDto, durationDays: 1, dayPortion: DayPortion.FIRST_HALF },
+        allowingRule,
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects a half-day portion when the leave rule does not allow half days', () => {
+    expect(() =>
+      (service as any).validateDayPortion(
+        { ...baseDto, dayPortion: DayPortion.SECOND_HALF },
+        forbiddingRule,
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects a half-day portion when no leave rule was resolved', () => {
+    expect(() =>
+      (service as any).validateDayPortion(
+        { ...baseDto, dayPortion: DayPortion.FIRST_HALF },
+        null,
+      ),
+    ).toThrow(BadRequestException);
   });
 });

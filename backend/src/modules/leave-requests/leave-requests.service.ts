@@ -20,11 +20,13 @@ import {
   EmployeeRole,
   EmployeeStatus,
   CalendarScope,
+  DayPortion,
 } from '../../common/enums';
 import { LeaveLedgerEntry } from '../leave-balances/entities/leave-ledger-entry.entity';
 import { LeaveBalance } from '../leave-balances/entities/leave-balance.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { LeaveType } from '../leave-types/entities/leave-type.entity';
+import { LeaveRule } from '../policies/entities/leave-rule.entity';
 import { ApprovalWorkflowsService } from '../approval-workflows/approval-workflows.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
@@ -41,9 +43,34 @@ export class LeaveRequestsService {
     private readonly dataSource: DataSource,
   ) {}
 
+  private validateDayPortion(
+    dto: { startDate: string; endDate: string; durationDays: number; dayPortion?: DayPortion },
+    leaveRule: LeaveRule | null,
+  ): DayPortion {
+    const dayPortion = dto.dayPortion ?? DayPortion.FULL_DAY;
+    if (dayPortion === DayPortion.FULL_DAY) return dayPortion;
+
+    if (dto.startDate !== dto.endDate) {
+      throw new BadRequestException(
+        'A half-day request (FIRST_HALF or SECOND_HALF) must have the same start and end date.',
+      );
+    }
+    if (Number(dto.durationDays) !== 0.5) {
+      throw new BadRequestException(
+        'A half-day request (FIRST_HALF or SECOND_HALF) must have a duration of exactly 0.5 days.',
+      );
+    }
+    if (!leaveRule?.allowsHalfDay) {
+      throw new BadRequestException(
+        'Half-day requests are not allowed for this leave type.',
+      );
+    }
+    return dayPortion;
+  }
+
   async create(
     employeeId: string,
-    dto: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; reason?: string },
+    dto: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; dayPortion?: DayPortion; reason?: string },
   ) {
     // Validate dates
     if (new Date(dto.startDate) > new Date(dto.endDate)) {
@@ -99,6 +126,15 @@ export class LeaveRequestsService {
           'The approval workflow for this leave type is not available. Contact HR.',
         );
       }
+
+      // 2b. Load the typed leave rule (for allowsHalfDay) and validate the requested day portion
+      const leaveRuleEntity = await em.findOne(LeaveRule, {
+        where: {
+          policyId: policyAssignment.epa_leave_policy_id,
+          leaveTypeId: dto.leaveTypeId,
+        },
+      });
+      const dayPortion = this.validateDayPortion(dto, leaveRuleEntity);
 
       // 3. Resolve approvers for the workflow steps and validate their presence
       const resolvedSteps: any[] = [];
@@ -176,6 +212,7 @@ export class LeaveRequestsService {
         startDate: dto.startDate,
         endDate: dto.endDate,
         durationDays: dto.durationDays,
+        dayPortion,
         reason: dto.reason,
         status: LeaveRequestStatus.PENDING,
         workflowSnapshot: snapshot,

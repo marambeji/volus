@@ -16,6 +16,7 @@ import { AdminGuard } from '../../common/guards/admin.guard';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { DayPortion } from '../../common/enums';
 
 @ApiTags('Leave Requests')
 @Controller({ path: 'leave-requests', version: '1' })
@@ -26,7 +27,7 @@ export class LeaveRequestsController {
   @ApiOperation({ summary: 'Submit a new leave request' })
   create(
     @Headers('x-employee-id') employeeId: string,
-    @Body() dto: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; reason?: string },
+    @Body() dto: { leaveTypeId: string; startDate: string; endDate: string; durationDays: number; dayPortion?: DayPortion; reason?: string },
   ) {
     if (!employeeId) throw new UnauthorizedException('Missing x-employee-id header');
     return this.service.create(employeeId, dto);
