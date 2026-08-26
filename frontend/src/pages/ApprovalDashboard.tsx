@@ -23,6 +23,7 @@ interface MyApprovalItem {
   startDate: string;
   endDate: string;
   durationDays: number;
+  dayPortion?: string;
   reason: string;
   submittedAt: string;
 }
@@ -79,6 +80,12 @@ interface TeamAvailabilityResult {
   impactPercent: number;
   members: TeamAvailabilityMember[];
   timeline: TeamAvailabilityDay[];
+}
+
+function dayPortionLabel(dayPortion?: string): string | null {
+  if (dayPortion === 'FIRST_HALF') return 'First Half';
+  if (dayPortion === 'SECOND_HALF') return 'Second Half';
+  return null;
 }
 
 // Leave Type Pill Component
@@ -195,7 +202,10 @@ function ActionConfirmationModal({
               </div>
               <div>
                 <span className="text-slate-400 font-medium block text-xs">Requested Duration</span>
-                <span className="font-semibold text-[#1b2559] dark:text-indigo-300">{request.durationDays} days</span>
+                <span className="font-semibold text-[#1b2559] dark:text-indigo-300">
+                  {request.durationDays} days
+                  {dayPortionLabel(request.dayPortion) && ` (${dayPortionLabel(request.dayPortion)})`}
+                </span>
               </div>
             </div>
 
@@ -723,6 +733,14 @@ export default function ApprovalDashboard() {
                             <span className="font-extrabold text-[#1b2559] dark:text-indigo-300">
                               {req.durationDays} {req.durationDays === 1 ? 'day' : 'days'}
                             </span>
+                            {dayPortionLabel(req.dayPortion) && (
+                              <>
+                                <span className="text-slate-300 dark:text-slate-600">•</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">
+                                  {dayPortionLabel(req.dayPortion)}
+                                </span>
+                              </>
+                            )}
                           </div>
 
                           {req.reason && (

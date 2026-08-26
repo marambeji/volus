@@ -33,6 +33,22 @@ describe('ApprovalDashboard Page Component', () => {
             reason: 'Vacation',
             submittedAt: '2026-08-20',
           },
+          {
+            stepInstanceId: 'step-102',
+            requestId: 'req-102',
+            stepOrder: 1,
+            approverType: 'MANAGER',
+            employeeId: 'emp-2',
+            leaveTypeId: 'lt-1',
+            employeeName: 'Sara Khalil',
+            leaveTypeName: 'Annual Leave',
+            startDate: '2026-09-11',
+            endDate: '2026-09-11',
+            durationDays: 0.5,
+            dayPortion: 'FIRST_HALF',
+            reason: 'Personal errand',
+            submittedAt: '2026-08-21',
+          },
         ]);
       }
       if (endpoint.startsWith('/employees')) {
@@ -104,6 +120,16 @@ describe('ApprovalDashboard Page Component', () => {
         expect.stringContaining('/approve'),
         expect.anything()
       );
+    });
+  });
+
+  it('shows a First Half badge for a half-day approval request', async () => {
+    await act(async () => {
+      render(<ApprovalDashboard />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/First Half/i)).toBeInTheDocument();
     });
   });
 });

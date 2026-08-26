@@ -25,6 +25,7 @@ interface RequestItem {
   startDate: string;
   endDate: string;
   durationDays: number;
+  dayPortion?: string;
   reason?: string;
   status: string;
   createdAt: string;
@@ -34,6 +35,12 @@ interface RequestItem {
   currentApproverType?: string | null;
   currentApproverLabel?: string | null;
   approvalInstances?: any[];
+}
+
+function dayPortionLabel(dayPortion?: string): string | null {
+  if (dayPortion === 'FIRST_HALF') return 'First Half';
+  if (dayPortion === 'SECOND_HALF') return 'Second Half';
+  return null;
 }
 
 function formatDate(dateStr?: string): string {
@@ -78,6 +85,7 @@ export default function LeaveTracking() {
           startDate: r.startDate || '',
           endDate: r.endDate || '',
           durationDays: r.durationDays ?? 1,
+          dayPortion: r.dayPortion || 'FULL_DAY',
           reason: r.reason || '',
           status: r.status ? String(r.status).toUpperCase() : 'PENDING',
           createdAt: r.createdAt || new Date().toISOString(),
@@ -367,6 +375,11 @@ export default function LeaveTracking() {
                             {req.durationDays === 1 ? 'DAY' : 'DAYS'}
                           </span>
                         </div>
+                        {dayPortionLabel(req.dayPortion) && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                            {dayPortionLabel(req.dayPortion)}
+                          </span>
+                        )}
 
                         {/* Title & Dates */}
                         <div className="min-w-0">
@@ -494,6 +507,11 @@ export default function LeaveTracking() {
                             {req.durationDays === 1 ? 'DAY' : 'DAYS'}
                           </span>
                         </div>
+                        {dayPortionLabel(req.dayPortion) && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                            {dayPortionLabel(req.dayPortion)}
+                          </span>
+                        )}
                         <div className="min-w-0 flex-1">
                           <h3 className="text-sm font-bold text-slate-800 dark:text-white truncate">{req.leaveTypeName}</h3>
                           <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
@@ -574,7 +592,7 @@ export default function LeaveTracking() {
         isOpen={!!selectedReq}
         onClose={() => { setSelectedReq(null); setConfirmCancelId(null); }}
         title="Leave Request Details"
-        subtitle={selectedReq ? `${selectedReq.leaveTypeName} · ${selectedReq.durationDays} ${selectedReq.durationDays === 1 ? 'day' : 'days'}` : ''}
+        subtitle={selectedReq ? `${selectedReq.leaveTypeName} · ${selectedReq.durationDays} ${selectedReq.durationDays === 1 ? 'day' : 'days'}${dayPortionLabel(selectedReq.dayPortion) ? ' · ' + dayPortionLabel(selectedReq.dayPortion) : ''}` : ''}
       >
         {selectedReq && (
           <div className="flex flex-col h-full gap-6">
@@ -600,6 +618,7 @@ export default function LeaveTracking() {
                 <span className="text-slate-400 font-medium">Duration</span>
                 <span className="font-extrabold text-slate-800 dark:text-white">
                   {selectedReq.durationDays} {selectedReq.durationDays === 1 ? 'day' : 'days'}
+                  {dayPortionLabel(selectedReq.dayPortion) && ` (${dayPortionLabel(selectedReq.dayPortion)})`}
                 </span>
               </div>
               <div className="flex justify-between items-center text-xs">

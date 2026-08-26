@@ -104,4 +104,36 @@ describe('LeaveTracking Page Component', () => {
       );
     });
   });
+
+  it('shows a Second Half badge for a half-day request', async () => {
+    // Local override (not the shared beforeEach list) so this stays the
+    // only request in the list — the other tests above rely on exactly
+    // one "Details" button being present.
+    mockedApiFetch.mockImplementation((endpoint: string) => {
+      if (endpoint.startsWith('/leave-requests/my-requests')) {
+        return Promise.resolve([
+          {
+            id: 'req-102',
+            leaveTypeId: 'lt-1',
+            leaveType: { id: 'lt-1', key: 'annual', label: 'Annual Leave' },
+            startDate: '2026-09-10',
+            endDate: '2026-09-10',
+            durationDays: 0.5,
+            dayPortion: 'SECOND_HALF',
+            reason: 'Doctor appointment',
+            status: 'PENDING',
+            createdAt: '2026-09-01T10:00:00.000Z',
+            approvalInstances: [],
+          },
+        ]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<LeaveTracking />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Second Half/i)).toBeInTheDocument();
+    });
+  });
 });
