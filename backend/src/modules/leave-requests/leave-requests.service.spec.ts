@@ -572,3 +572,49 @@ describe('LeaveRequestsService - validateDayPortion', () => {
     ).toThrow(BadRequestException);
   });
 });
+
+describe('LeaveRequestsService - findMyRequests exposes dayPortion', () => {
+  let service: LeaveRequestsService;
+  let requestRepo: { find: jest.Mock };
+
+  beforeEach(async () => {
+    requestRepo = { find: jest.fn() };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LeaveRequestsService,
+        { provide: getRepositoryToken(LeaveRequest), useValue: requestRepo },
+        { provide: getRepositoryToken(ApprovalInstance), useValue: {} },
+        { provide: LeaveBalancesService, useValue: {} },
+        { provide: ApprovalWorkflowsService, useValue: {} },
+        { provide: AuditLogsService, useValue: {} },
+        { provide: DataSource, useValue: {} },
+      ],
+    }).compile();
+    service = module.get<LeaveRequestsService>(LeaveRequestsService);
+  });
+
+  it('includes dayPortion on each mapped request', async () => {
+    requestRepo.find.mockResolvedValue([
+      {
+        id: 'req-1',
+        employeeId: 'emp-1',
+        leaveTypeId: 'lt-1',
+        leaveType: { label: 'Annual Leave' },
+        startDate: '2026-09-10',
+        endDate: '2026-09-10',
+        durationDays: 0.5,
+        dayPortion: DayPortion.FIRST_HALF,
+        reason: '',
+        status: 'PENDING',
+        rejectionReason: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        approvalInstances: [],
+      },
+    ]);
+
+    const result = await service.findMyRequests('emp-1');
+
+    expect(result[0].dayPortion).toBe(DayPortion.FIRST_HALF);
+  });
+});

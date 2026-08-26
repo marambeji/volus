@@ -295,6 +295,7 @@ export class LeaveRequestsService {
       startDate: inst.request?.startDate,
       endDate: inst.request?.endDate,
       durationDays: inst.request?.durationDays,
+      dayPortion: inst.request?.dayPortion,
       reason: inst.request?.reason,
       submittedAt: inst.request?.createdAt,
     }));
@@ -765,7 +766,7 @@ export class LeaveRequestsService {
         startDate: lr.startDate,
         endDate: lr.endDate,
         requestedDuration: lr.durationDays,
-        halfDayInformation: null,
+        dayPortion: lr.dayPortion,
         employeeNote: lr.reason,
         supportingDocumentMetadata: null,
         currentStatus: lr.status,
@@ -885,6 +886,7 @@ export class LeaveRequestsService {
       startDate: lr.startDate,
       endDate: lr.endDate,
       requestedDuration: lr.durationDays,
+      dayPortion: lr.dayPortion,
       status: lr.status,
     }));
   }
@@ -1415,6 +1417,7 @@ export class LeaveRequestsService {
         startDate: lr.startDate,
         endDate: lr.endDate,
         durationDays: lr.durationDays,
+        dayPortion: lr.dayPortion,
         reason: lr.reason,
         status: lr.status,
         rejectionReason: lr.rejectionReason,
