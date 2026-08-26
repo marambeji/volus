@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: ✅ All 6 tasks complete, plus a Task 7 fix found in real usage after rollout.** Executed inline in the same session (not via subagent dispatch — the human partner asked for direct implementation partway through Task 1) rather than through subagent-driven-development. Backend 154/154 tests passing, frontend 39/39 passing (stable across repeated full-suite runs), `tsc --noEmit` clean on every touched file. See "Deviations from this plan" at the end of each task, and Task 7, for what changed versus the text below. Commits (in order): `ade9413`, `ddf2b8a`, `c844213`, `92291f4`, `69d49b2`, `17ed88f`, `8f0564d`, `573fa5d`.
+
 **Goal:** Let an employee request a half-day of an *existing* leave type (e.g. Annual Leave) — no new "Half Day" leave type — by tagging the request `FULL_DAY`, `FIRST_HALF`, or `SECOND_HALF`, and correctly deduct 0.5 days from their balance for a half-day request.
 
 **Architecture:** The system already stores `durationDays` as a decimal (`numeric(6,2)`) and already has a per-leave-rule `allowsHalfDay` toggle that gates a `0.5 (Half Day)` option in the request form's per-date amount dropdown — balance deduction (`applyLedger`) already works generically off `request.durationDays`, so 0.5-day deduction needs no change. The one real gap is that nothing records **which half** of the day was taken. This plan adds a `dayPortion` enum column to `leave_requests` (default `FULL_DAY`), validates it server-side (a non-`FULL_DAY` portion requires a single-day request with `durationDays === 0.5` and a leave rule that allows half days), threads it through the existing read endpoints, and adds a small "First Half / Second Half" picker to the request form plus a badge on the request-list surfaces.
@@ -56,7 +58,7 @@
 **Interfaces:**
 - Produces: `DayPortion` enum (`FULL_DAY`, `FIRST_HALF`, `SECOND_HALF`) importable from `../../common/enums` (relative to `backend/src/modules/**`); `LeaveRequest.dayPortion: DayPortion` column, non-null, default `FULL_DAY`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/src/common/enums/day-portion.spec.ts`:
 
@@ -72,12 +74,12 @@ describe('DayPortion enum', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx jest common/enums/day-portion.spec.ts`
 Expected: FAIL — `DayPortion` is not exported from `./index` (TS compile error).
 
-- [ ] **Step 3: Add the enum**
+- [x] **Step 3: Add the enum**
 
 In `backend/src/common/enums/index.ts`, add (near `LeaveRequestStatus`):
 
@@ -89,12 +91,12 @@ export enum DayPortion {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx jest common/enums/day-portion.spec.ts`
 Expected: PASS
 
-- [ ] **Step 5: Add the entity column**
+- [x] **Step 5: Add the entity column**
 
 In `backend/src/modules/leave-requests/entities/leave-request.entity.ts`, change the import and add the column right after `durationDays`:
 
@@ -112,7 +114,7 @@ import { LeaveRequestStatus, DayPortion } from '../../../common/enums';
   dayPortion: DayPortion;
 ```
 
-- [ ] **Step 6: Write the migration**
+- [x] **Step 6: Write the migration**
 
 Create `backend/src/database/migrations/1787700000000-AddDayPortionToLeaveRequests.ts`:
 
@@ -140,7 +142,7 @@ export class AddDayPortionToLeaveRequests1787700000000
 }
 ```
 
-- [ ] **Step 7: Register the migration**
+- [x] **Step 7: Register the migration**
 
 In `backend/src/database/data-source.ts`, add the import after the `AddHrPermissions1787600000000` import:
 
@@ -156,17 +158,19 @@ And add it as the last entry of the `migrations: [...]` array:
   ],
 ```
 
-- [ ] **Step 8: Verify the project still compiles**
+- [x] **Step 8: Verify the project still compiles**
 
 Run: `cd backend && npx tsc --noEmit -p tsconfig.json`
 Expected: no new errors from the touched files.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add backend/src/common/enums/index.ts backend/src/common/enums/day-portion.spec.ts backend/src/database/migrations/1787700000000-AddDayPortionToLeaveRequests.ts backend/src/database/data-source.ts backend/src/modules/leave-requests/entities/leave-request.entity.ts
 git commit -m "feat: add DayPortion enum and leave_requests.day_portion column"
 ```
+
+**Deviations from this plan:** none — implemented exactly as written (commit `ade9413`). One operational gotcha discovered later: this task only adds the migration *file*; it still has to be run against the actual database (`cd backend && npm run migration:run`) before the column exists. `synchronize: false` means TypeORM never creates it automatically. The first live submission attempt after Task 6 shipped failed with `column LeaveRequest.day_portion does not exist` until the migration was run — see Task 7.
 
 ---
 
@@ -181,7 +185,7 @@ git commit -m "feat: add DayPortion enum and leave_requests.day_portion column"
 - Consumes: `DayPortion` enum, `LeaveRequest.dayPortion` (Task 1).
 - Produces: `LeaveRequestsService.validateDayPortion(dto, leaveRule): DayPortion` — a private method, callable in tests via `(service as any).validateDayPortion(...)`. `create()`'s DTO type gains `dayPortion?: DayPortion` and its created `LeaveRequest` now persists `dayPortion`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add these two imports to the top of `backend/src/modules/leave-requests/leave-requests.service.spec.ts`, alongside the existing imports:
 
@@ -282,12 +286,12 @@ describe('LeaveRequestsService - validateDayPortion', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd backend && npx jest leave-requests.service.spec.ts -t "validateDayPortion"`
 Expected: FAIL — `validateDayPortion` does not exist on `LeaveRequestsService`.
 
-- [ ] **Step 3: Implement `validateDayPortion` and wire it into `create()`**
+- [x] **Step 3: Implement `validateDayPortion` and wire it into `create()`**
 
 In `backend/src/modules/leave-requests/leave-requests.service.ts`, update imports:
 
@@ -373,7 +377,7 @@ Finally, persist it in the `em.create(LeaveRequest, {...})` call:
       });
 ```
 
-- [ ] **Step 4: Update the controller's DTO type**
+- [x] **Step 4: Update the controller's DTO type**
 
 In `backend/src/modules/leave-requests/leave-requests.controller.ts`, add the import:
 
@@ -390,22 +394,24 @@ And update the `create` method's `@Body()` type:
   ) {
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `cd backend && npx jest leave-requests.service.spec.ts`
 Expected: PASS (all tests in the file, including the pre-existing approval-workflow suite — this task must not break it).
 
-- [ ] **Step 6: Verify the project still compiles**
+- [x] **Step 6: Verify the project still compiles**
 
 Run: `cd backend && npx tsc --noEmit -p tsconfig.json`
 Expected: no new errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/modules/leave-requests/leave-requests.controller.ts backend/src/modules/leave-requests/leave-requests.service.ts backend/src/modules/leave-requests/leave-requests.service.spec.ts
 git commit -m "feat: validate and persist half-day dayPortion on leave request submission"
 ```
+
+**Deviations from this plan:** none — implemented exactly as written (commit `ddf2b8a`), including the `LeaveRule` entity import and the `validateDayPortion` signature.
 
 ---
 
@@ -419,7 +425,7 @@ git commit -m "feat: validate and persist half-day dayPortion on leave request s
 - Consumes: `LeaveRequest.dayPortion` (Task 1).
 - Produces: `dayPortion` field on the objects returned by `getMyApprovals()`, `findMyRequests()`, `hrFindAll()` (replacing the unused `halfDayInformation: null` stub), and `getWhosOut()`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append this as a new top-level `describe` block at the end of `backend/src/modules/leave-requests/leave-requests.service.spec.ts` (after the `describe('LeaveRequestsService - validateDayPortion', ...)` block added in Task 2), reusing the same `{ find: jest.Mock }` `requestRepo` shape declared in the file's first `describe` block:
 
@@ -471,12 +477,12 @@ describe('LeaveRequestsService - findMyRequests exposes dayPortion', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx jest leave-requests.service.spec.ts -t "exposes dayPortion"`
 Expected: FAIL — `result[0].dayPortion` is `undefined`.
 
-- [ ] **Step 3: Add `dayPortion` to the four mappers**
+- [x] **Step 3: Add `dayPortion` to the four mappers**
 
 In `backend/src/modules/leave-requests/leave-requests.service.ts`:
 
@@ -515,17 +521,19 @@ In `getWhosOut()`'s returned object (the one with `requestedDuration: lr.duratio
       dayPortion: lr.dayPortion,
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx jest leave-requests.service.spec.ts`
 Expected: PASS (whole file).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/modules/leave-requests/leave-requests.service.ts backend/src/modules/leave-requests/leave-requests.service.spec.ts
 git commit -m "feat: expose dayPortion on leave-requests read endpoints"
 ```
+
+**Deviations from this plan:** none — implemented exactly as written (commit `c844213`), including replacing the dead `halfDayInformation: null` stub in `hrFindAll()` with the real field.
 
 ---
 
@@ -540,7 +548,7 @@ git commit -m "feat: expose dayPortion on leave-requests read endpoints"
 - Consumes: `POST /leave-requests` now accepting `dayPortion` (Task 2).
 - Produces: `submitLeaveRequest(payload)` accepts an optional `dayPortion: 'FULL_DAY' | 'FIRST_HALF' | 'SECOND_HALF'` field.
 
-- [ ] **Step 1: Update `submitLeaveRequest`'s payload type**
+- [x] **Step 1: Update `submitLeaveRequest`'s payload type**
 
 In `frontend/src/services/employeesApi.ts`:
 
@@ -550,7 +558,7 @@ export async function submitLeaveRequest(
 ): Promise<any> {
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `frontend/src/components/dashboard/RequestModal.test.tsx`:
 
@@ -657,12 +665,12 @@ describe('RequestModal half-day portion', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/dashboard/RequestModal.test.tsx`
 Expected: FAIL — no "Second Half" button exists yet, and the submitted payload has no `dayPortion`.
 
-- [ ] **Step 4: Implement the picker in `RequestModal.tsx`**
+- [x] **Step 4: Implement the picker in `RequestModal.tsx`**
 
 Add state (next to the other `useState` declarations, after `dailyAmounts`):
 
@@ -749,22 +757,24 @@ Finally, wire it into submission — update the non-holiday branch of `handleSub
         });
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/dashboard/RequestModal.test.tsx`
 Expected: PASS
 
-- [ ] **Step 6: Type-check**
+- [x] **Step 6: Type-check**
 
 Run: `cd frontend && npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -i "RequestModal\|employeesApi"`
 Expected: no new errors introduced by this task (pre-existing unrelated `TS6133` unused-var warnings in this file are fine to leave, per the file's existing state).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/services/employeesApi.ts frontend/src/components/dashboard/RequestModal.tsx frontend/src/components/dashboard/RequestModal.test.tsx
 git commit -m "feat: add First/Second Half picker to the leave request form"
 ```
+
+**Deviations from this plan:** the test's date inputs were driven with `fireEvent.change` (not `screen.getByLabelText` + `user.type` as an earlier draft of this step assumed) because the "From Date"/"To Date" `<label>`s aren't `htmlFor`-linked to their inputs, and native `type="date"` inputs don't accept character-by-character `userEvent.type` reliably in jsdom — the plan text above was already corrected to this before Task 4 was dispatched, so the code matches. After committing, the test was found flaky under a full 14-file parallel suite run (passed standalone, timed out at the 5s default under load) — fixed in commit `8f0564d` by raising it to a 15s timeout; confirmed stable across two full-suite reruns.
 
 ---
 
@@ -779,7 +789,7 @@ git commit -m "feat: add First/Second Half picker to the leave request form"
 **Interfaces:**
 - Consumes: `dayPortion` field now present on `/leave-requests/my-requests` and `/leave-requests/my-approvals` responses (Task 3).
 
-- [ ] **Step 1: Write the failing test (LeaveTracking)**
+- [x] **Step 1: Write the failing test (LeaveTracking)**
 
 In `frontend/src/pages/LeaveTracking.test.tsx`, add a second entry to the mocked `/leave-requests/my-requests` response in the existing `beforeEach` (keep the existing `req-101` entry, add this as a second array item):
 
@@ -811,12 +821,12 @@ Add a new test at the end of the `describe` block:
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/pages/LeaveTracking.test.tsx`
 Expected: FAIL — no "Second Half" text rendered.
 
-- [ ] **Step 3: Implement in `LeaveTracking.tsx`**
+- [x] **Step 3: Implement in `LeaveTracking.tsx`**
 
 Add the field to `RequestItem`:
 
@@ -869,12 +879,12 @@ In the detail drawer subtitle, extend the existing template literal:
 
 And in the "Duration" detail row, append the same conditional span after the days text.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/pages/LeaveTracking.test.tsx`
 Expected: PASS (both the new test and the three pre-existing ones).
 
-- [ ] **Step 5: Write the failing test (ApprovalDashboard)**
+- [x] **Step 5: Write the failing test (ApprovalDashboard)**
 
 In `frontend/src/pages/ApprovalDashboard.test.tsx`, add `dayPortion: 'FIRST_HALF'` and change `durationDays: 5` to `durationDays: 0.5` **only if you duplicate the mocked item** — instead, add a second mocked approval item to the `/leave-requests/my-approvals` array (keep `req-101` as-is):
 
@@ -911,12 +921,12 @@ Add a test:
   });
 ```
 
-- [ ] **Step 6: Run test to verify it fails**
+- [x] **Step 6: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/pages/ApprovalDashboard.test.tsx`
 Expected: FAIL — no "First Half" text rendered.
 
-- [ ] **Step 7: Implement in `ApprovalDashboard.tsx`**
+- [x] **Step 7: Implement in `ApprovalDashboard.tsx`**
 
 Add `dayPortion?: string;` to the `MyApprovalItem`-style interface at the top of the file (the one with `durationDays: number;` at line ~25).
 
@@ -937,22 +947,29 @@ Next to the existing duration text (`{req.durationDays} {req.durationDays === 1 
 
 (and the equivalent single-span version, without the bullet separator, in the modal.)
 
-- [ ] **Step 8: Run test to verify it passes**
+- [x] **Step 8: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/pages/ApprovalDashboard.test.tsx`
 Expected: PASS
 
-- [ ] **Step 9: Type-check**
+- [x] **Step 9: Type-check**
 
 Run: `cd frontend && npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -i "LeaveTracking\|ApprovalDashboard"`
 Expected: no new errors.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add frontend/src/pages/LeaveTracking.tsx frontend/src/pages/LeaveTracking.test.tsx frontend/src/pages/ApprovalDashboard.tsx frontend/src/pages/ApprovalDashboard.test.tsx
 git commit -m "feat: show half-day AM/PM badge on employee and manager leave views"
 ```
+
+**Deviations from this plan:**
+- `LeaveTracking.test.tsx`: the plan's Step 1 said to add the half-day request as a *second item in the shared `beforeEach` mock list*. That would have broken the file's other three tests, which all use singular `getByRole('button', { name: /Details/i })` — two list rows means two "Details" buttons, and `getByRole` throws on multiple matches. Fixed instead with a local `mockedApiFetch.mockImplementation` override inside the new test only, keeping it the sole item in that test's list. The other three tests were re-verified to still pass unchanged.
+- `ApprovalDashboard.test.tsx`: the plan's Step 5 named the second mocked employee "Ahmad Staff" — same name as the existing mocked employee. `renders pending approval requests for managers` asserts `getByText(/Ahmad Staff/i)` (singular), so a second element with the same name broke it. Renamed the second mock employee to "Sara Khalil"; all three tests (two pre-existing, one new) pass.
+Both the mock-list override and the employee rename are in files this task's own text already modifies, so they landed in this task's commit (`69d49b2`), not a separate fix-up.
+
+`ApprovalDashboard.test.tsx`'s pre-existing `handles request approval action` test was separately found flaky under a full-suite parallel run (same 5s-default-timeout class of issue as Task 4's fix) — that one surfaced later, during Task 7's verification, and was bumped to 15s in Task 7's commit (`573fa5d`) alongside the Annual-Leave-only fix; confirmed stable across two full-suite reruns.
 
 ---
 
@@ -965,7 +982,7 @@ git commit -m "feat: show half-day AM/PM badge on employee and manager leave vie
 **Interfaces:**
 - Consumes: `dayPortion` field now present on `hrFindAll()`'s response, i.e. `GET /leave-requests/hr` (Task 3), returned by `hrGetLeaveRequests()` in `frontend/src/services/adminApi.ts`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/admin/pages/LeaveRequests.test.tsx`:
 
@@ -1030,12 +1047,12 @@ describe('Admin LeaveRequests half-day badge', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/admin/pages/LeaveRequests.test.tsx`
 Expected: FAIL — no "First Half" text rendered (and possibly fails earlier if the page doesn't render at all — confirm the failure is about the missing badge, not a setup error, before proceeding).
 
-- [ ] **Step 3: Implement in `LeaveRequests.tsx`**
+- [x] **Step 3: Implement in `LeaveRequests.tsx`**
 
 Add a helper near the top of the file (after the imports):
 
@@ -1068,25 +1085,54 @@ In the detail drawer's grid, add a conditional entry to the array right after `[
 
 (replace the existing `['Total Days', ...]` line with this one — no separate array entry needed.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/admin/pages/LeaveRequests.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Type-check**
+- [x] **Step 5: Type-check**
 
 Run: `cd frontend && npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -i "admin/pages/LeaveRequests"`
 Expected: no new errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/admin/pages/LeaveRequests.tsx frontend/src/admin/pages/LeaveRequests.test.tsx
 git commit -m "feat: show half-day AM/PM badge in the HR leave requests review page"
 ```
 
+**Deviations from this plan:** none — implemented exactly as written (commit `17ed88f`).
+
+---
+
+### Task 7: Post-rollout fixes (not in the original plan)
+
+**Why:** two problems surfaced only after Task 6 shipped and the feature was tried against the real, running app — one from live manual testing, one from a follow-up user request.
+
+**7a — Migration never applied to the real database.** Task 1 wrote the migration file and committed it, but nobody had run it against the actual (non-test) Postgres database. The first live "Request Time Off" submission after Task 6 shipped failed with `column LeaveRequest.day_portion does not exist` (TypeORM `synchronize: false` never auto-creates columns — only `migration:run` does). Fixed by running:
+
+```bash
+cd backend && npm run migration:run
+```
+
+Confirmed via `npm run migration:show` that `AddDayPortionToLeaveRequests1787700000000` moved from `[ ]` to `[X]`. No code change — this is a deployment step, not a defect in the written migration. **Any future environment this feature is deployed to needs this same `migration:run` step.**
+
+**7b — Half-day was available on every leave type, not just Annual Leave.** After the fix above, the user reported the "0.5 (Half Day)" option appearing on Sick Leave too, and asked for it to be Annual-Leave-only. Root cause: `RequestModal.tsx`'s synthetic balance fallback (used when a leave type has no configured policy rule yet for that employee — the case here, since this dev database has no Sick Leave rule configured) hardcoded `allowsHalfDay: true` for every leave type, regardless of key. This was a pre-existing bug unrelated to this plan's own tasks (the fallback object literal predates this feature) — this plan's `RequestModal.tsx` changes in Task 4 only added the picker; they didn't touch this fallback line.
+
+Fixed in commit `573fa5d`:
+- `frontend/src/components/dashboard/RequestModal.tsx`: the fallback's `allowsHalfDay: true` → `allowsHalfDay: lt.key === 'annual'`.
+- `frontend/src/admin/pages/LeavePolicies.tsx`: `defaultQuotaForType`'s seed default `allowsHalfDay: keyLower === 'annual' || keyLower === 'compensation'` → `allowsHalfDay: keyLower === 'annual'` (only affects the pre-filled checkbox when HR creates a *new* policy quota going forward — doesn't retroactively change already-saved policies).
+- The real `leaveRule.allowsHalfDay` toggle in Leave Policies (admin-configurable, unchanged) still lets HR opt another leave type in later if they choose — this fix only corrects the default/fallback, not the architecture.
+
+Same commit also bumped `ApprovalDashboard.test.tsx`'s `handles request approval action` timeout to 15s (see Task 6's deviation note) after it was caught flaking under a full-suite run while re-verifying this fix.
+
+No new automated test was added for 7b specifically — it's a one-line default-value change in two files, verified by re-running the full frontend suite twice (39/39 both times) plus a manual check in the running app that Sick Leave no longer offers the half-day option while Annual Leave still does.
+
 ---
 
 ## Post-Plan Manual Verification
 
-After all tasks: start the backend, run its migrations (`npm run migration:run` or equivalent in `backend/package.json`), then in the running app: submit a single-day Annual Leave request, select the `0.5 (Half Day)` amount, pick `Second Half (PM)`, submit, and confirm (a) the balance dropped by exactly 0.5 in the employee's "Leave Balance" card, and (b) the "Second Half" badge shows on the employee's Approval Progress list, the manager's Approval Dashboard, and the HR admin's Leave Requests page.
+**Status: ✅ Done**, via Task 7 above (this ran the migration and confirmed the flow end-to-end during live troubleshooting, rather than as one standalone verification pass).
+
+After all tasks: start the backend, run its migrations — `cd backend && npm run migration:run` (confirm with `npm run migration:show` that every row shows `[X]`, including `AddDayPortionToLeaveRequests1787700000000`) — then in the running app: submit a single-day Annual Leave request, select the `0.5 (Half Day)` amount, pick `Second Half (PM)`, submit, and confirm (a) the balance dropped by exactly 0.5 in the employee's "Leave Balance" card, and (b) the "Second Half" badge shows on the employee's Approval Progress list, the manager's Approval Dashboard, and the HR admin's Leave Requests page. Also confirm the half-day amount option is absent for a leave type other than Annual Leave (e.g. Sick Leave) — this is what Task 7b fixed.
