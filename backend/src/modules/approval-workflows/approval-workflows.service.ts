@@ -28,7 +28,10 @@ export class ApprovalWorkflowsService {
     private readonly auditService: AuditLogsService,
   ) { }
 
-  private validateSteps(steps: CreateApprovalWorkflowDto['steps']) {
+  private validateSteps(
+    steps: CreateApprovalWorkflowDto['steps'],
+    requireSpecificApprover = true,
+  ) {
     const orders = steps.map((s) => s.stepOrder);
     const uniqueOrders = new Set(orders);
     if (uniqueOrders.size !== orders.length) {
@@ -44,6 +47,7 @@ export class ApprovalWorkflowsService {
     }
     for (const step of steps) {
       if (
+        requireSpecificApprover &&
         step.approverType === ApproverType.SPECIFIC_PERSON &&
         !step.specificApproverId &&
         !step.specificApproverEmail
@@ -86,7 +90,9 @@ export class ApprovalWorkflowsService {
       where: { name: dto.name },
     });
     if (existing) throw new ConflictException('Workflow name already exists.');
-    this.validateSteps(dto.steps);
+    // The specific approver is assigned later, per leave-type, from Leave Policies —
+    // creating the workflow template itself shouldn't require one yet.
+    this.validateSteps(dto.steps, false);
 
     // Validate date logic
     if (dto.effectiveTo && new Date(dto.effectiveTo) < new Date(dto.effectiveFrom)) {
@@ -188,7 +194,10 @@ export class ApprovalWorkflowsService {
       if (existing)
         throw new ConflictException('Workflow name already in use.');
     }
-    if (dto.steps) this.validateSteps(dto.steps);
+    // Same as create(): the specific approver may not be assigned yet
+    // (set later, per leave-type, from Leave Policies) — actual submission
+    // of a leave request is where a missing approver is enforced.
+    if (dto.steps) this.validateSteps(dto.steps, false);
 
     // Validate dates
     const effectiveFrom = dto.effectiveFrom ?? oldWorkflow.effectiveFrom;

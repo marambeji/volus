@@ -14,8 +14,6 @@ import {
 import { getCountries, type CountryItem } from '../../services/countriesApi';
 import { getLeaveTypes, type LeaveTypeItem } from '../../services/leaveTypesApi';
 import { getEmployees, type BackendEmployee } from '../../services/employeesApi';
-import { getDivisions, type DivisionItem } from '../../services/divisionsApi';
-import { getDepartments, type DepartmentItem } from '../../services/departmentsApi';
 import { ApiError } from '../../services/apiClient';
 import { useHrPermission } from '../utils/useHrPermissions';
 
@@ -39,8 +37,6 @@ export default function ApprovalLevels() {
   const [countries, setCountries] = useState<CountryItem[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeItem[]>([]);
   const [employees, setEmployees] = useState<BackendEmployee[]>([]);
-  const [divisions, setDivisions] = useState<DivisionItem[]>([]);
-  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,20 +58,16 @@ export default function ApprovalLevels() {
     setLoading(true);
     setApiError(null);
     try {
-      const [wfs, cList, ltList, empList, divList, deptList] = await Promise.all([
+      const [wfs, cList, ltList, empList] = await Promise.all([
         getApprovalWorkflows(signal),
         getCountries(signal),
         getLeaveTypes(signal),
         getEmployees({ limit: 1000 }, signal),
-        getDivisions(signal),
-        getDepartments(signal),
       ]);
       setWorkflows(wfs);
       setCountries(cList || []);
       setLeaveTypes(ltList || []);
       setEmployees(empList || []);
-      setDivisions(divList || []);
-      setDepartments(deptList || []);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load approval workflows data';
@@ -126,7 +118,7 @@ export default function ApprovalLevels() {
   async function loadEmployeesForDept(index: number, deptId: string) {
     setDeptLoading((prev) => ({ ...prev, [index]: true }));
     try {
-      const emps = await getEmployees({ status: 'ACTIVE', divisionId: deptId, limit: 500 });
+      const emps = await getEmployees({ status: 'ACTIVE', departmentId: deptId, limit: 500 });
       setDeptEmployees((prev) => ({ ...prev, [index]: emps }));
     } catch {
       setDeptEmployees((prev) => ({ ...prev, [index]: [] }));
@@ -189,7 +181,7 @@ export default function ApprovalLevels() {
     }
 
     // No per-level validation needed for specific_employee
-    // — department/person are managed via Leave Policies
+    // — department/person are assigned per leave-type in Leave Policies
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -543,7 +535,7 @@ export default function ApprovalLevels() {
                   </div>
                 </div>
 
-                {/* Specific Person fields removed - not needed in Approval Levels */}
+                {/* Specific person/department is assigned per leave-type in Leave Policies, not here */}
 
               </div>
             ))}

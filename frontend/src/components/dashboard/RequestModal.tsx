@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, CalendarDays, FileText, Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2, Upload } from 'lucide-react';
+import { X, CalendarDays, FileText, Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { getMyLeaveBalances, submitLeaveRequest, getMyLeaveRequests, getEmployees } from '../../services/employeesApi';
 import { getLeaveTypes } from '../../services/leaveTypesApi';
 import { getHolidays } from '../../services/holidaysApi';
@@ -148,7 +148,6 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
   const availableBalance = selectedLeaveConfig?.availableBalance ?? 0;
   const usageYtd = selectedLeaveConfig?.usageYtd ?? 0;
   const requiresNote = selectedLeaveConfig?.requiresNote ?? false;
-  const requiresDocument = selectedLeaveConfig?.requiresDocument ?? false;
   const requiresPositiveBalance = selectedLeaveConfig?.requiresPositiveBalance ?? true;
   const minRequestDays = selectedLeaveConfig?.minRequestDays ?? 0;
   const maxRequestDays = selectedLeaveConfig?.maxRequestDays;
@@ -234,8 +233,6 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
       if (!blockingError) {
         if (requiresNote && !reason.trim()) {
           blockingError = `A note is required for this leave type.`;
-        } else if (requiresDocument) {
-          blockingError = `A supporting document is required for this leave type (Secure attachment service is missing).`;
         }
       }
     } else {
@@ -267,8 +264,6 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
       if (!blockingError) {
         if (requiresNote && !reason.trim()) {
           blockingError = `A note is required for this leave type.`;
-        } else if (requiresDocument) {
-          blockingError = `A supporting document is required for this leave type (Secure attachment service is missing).`;
         }
       }
     }
@@ -783,15 +778,6 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
                     />
                   </div>
 
-                  {requiresDocument && (
-                    <div>
-                       <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Supporting Document *</label>
-                       <div className="w-full flex flex-col items-center justify-center p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-sm text-slate-500">
-                         <Upload size={20} className="mb-2 text-slate-400" />
-                         <span>Upload feature unavailable. Secure attachment service is missing.</span>
-                       </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

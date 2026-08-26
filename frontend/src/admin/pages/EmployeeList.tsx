@@ -12,9 +12,9 @@ import HistoryDrawer from '../components/HistoryDrawer';
 import { createEmployee, updateEmployee, deleteEmployee } from '../../services/employeesApi';
 import Pagination from '../../components/ui/Pagination';
 import { toAdminEmployee, toBackendEmployeePayload } from '../../services/mappers/employeeMapper';
-import { CANONICAL_DEPARTMENT_NAMES } from '../data/adminMockData';
 import { apiFetch } from '../../services/apiClient';
 import { getCountries, type CountryItem } from '../../services/countriesApi';
+import { getDepartments } from '../../services/departmentsApi';
 import { useHrPermission } from '../utils/useHrPermissions';
 
 const emptyForm = (): Omit<AdminEmployee, 'id'> => ({
@@ -46,6 +46,7 @@ export default function EmployeeList() {
   const [filterStatus, setFilterStatus] = useState('');
   const [onLeaveIds, setOnLeaveIds] = useState<Set<string>>(new Set());
   const [countriesList, setCountriesList] = useState<CountryItem[]>([]);
+  const [departmentNames, setDepartmentNames] = useState<string[]>([]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -57,6 +58,7 @@ export default function EmployeeList() {
 
   useEffect(() => {
     getCountries().then(list => setCountriesList(list || [])).catch(() => {});
+    getDepartments().then(list => setDepartmentNames((list || []).map(d => d.name))).catch(() => {});
   }, []);
 
   // Fetch who is on leave TODAY using the whos-out endpoint (same as WhosOut widget)
@@ -118,12 +120,11 @@ export default function EmployeeList() {
     }
   }, [toast]);
 
-  // Filter bar: only departments that actually have employees, so filtering by
-  // an empty department isn't offered. Add/Edit form: full canonical list (see
-  // departmentOptions below) so a department can be picked before anyone's
-  // assigned to it yet.
+  // Departments come from the real /departments table so the dropdown only
+  // ever lists what's actually in the DB (falls back to employees' current
+  // departments before that request resolves).
   const departments = [...new Set(state.employees.map(e => e.department))];
-  const departmentOptions = Array.from(new Set([...CANONICAL_DEPARTMENT_NAMES, ...departments])).sort();
+  const departmentOptions = Array.from(new Set(departmentNames.length > 0 ? departmentNames : departments)).sort();
   const countries = countriesList.length > 0
     ? countriesList.map(c => c.name)
     : ['Lebanon', 'United Arab Emirates', 'Saudi Arabia', 'United Kingdom', 'France', 'Tunisia', 'Canada'];
@@ -325,12 +326,11 @@ export default function EmployeeList() {
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 text-xs">
                       {emp.country === 'Supprimé' || emp.country === 'Deleted' || !emp.country ? (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                          Supprimé
+                          Deleted
                         </span>
                       ) : (
                         <div>{emp.country}</div>
                       )}
-                      <div className="text-[10px] text-slate-400">{emp.division || 'Levant'}</div>
                     </td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 text-xs">{mgr?.name ?? '—'}</td>
                     <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 text-xs">{new Date(emp.hireDate).toLocaleDateString('en-GB', { month:'short', year:'numeric' })}</td>

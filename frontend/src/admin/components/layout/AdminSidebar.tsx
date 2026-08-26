@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { X, LayoutDashboard, Users, CalendarCheck, Wallet, FileText, Globe, Palmtree, Building2, BarChart3, Settings, ClipboardList, Bell, Shield, History, LogOut, Mail, Lock } from 'lucide-react';
+import { X, LayoutDashboard, Users, CalendarCheck, Wallet, FileText, Globe, Palmtree, Building2, BarChart3, Settings, ClipboardList, Bell, Shield, History, LogOut, Mail } from 'lucide-react';
 import { useAdminUnreadCount } from '../../utils/useAdminUnreadCount';
 import { getCurrentUser } from '../../utils/useHrPermissions';
 import type { HrModule } from '../../types/hrPermissions';
@@ -40,15 +40,6 @@ export default function AdminSidebar({ isOpen, onClose, onLogout }: { isOpen: bo
   const permissions = hrUser.isSuperAdmin ? FULL_HR_PERMISSIONS : (hrUser.permissions || FULL_HR_PERMISSIONS);
 
   const visibleNav = nav
-    .map(section => {
-      if (section.section !== 'CONFIGURATION') return section;
-      return {
-        ...section,
-        items: hrUser.isSuperAdmin
-          ? [...section.items, { label: 'HR Permissions', path: '/admin/hr-permissions', icon: Lock }]
-          : section.items,
-      };
-    })
     .map(section => ({
       ...section,
       items: section.items.filter(item => !item.module || permissions[item.module as HrModule]?.canView !== false),

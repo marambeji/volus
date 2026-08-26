@@ -7,8 +7,6 @@ import SlideDrawer from '../components/ui/SlideDrawer';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import HistoryDrawer from '../components/HistoryDrawer';
 import { getCountries } from '../../services/countriesApi';
-import { getDivisions } from '../../services/divisionsApi';
-import type { DivisionItem } from '../../services/divisionsApi';
 import { getDepartments } from '../../services/departmentsApi';
 import type { DepartmentItem } from '../../services/departmentsApi';
 import { getLeaveTypes } from '../../services/leaveTypesApi';
@@ -101,7 +99,6 @@ export default function LeavePolicies() {
   const { canManage } = useHrPermission('leavePolicies');
   const [policies, setPolicies] = useState<CountryPolicy[]>([]);
   const [countries, setCountries] = useState<CountryItem[]>([]);
-  const [divisions, setDivisions] = useState<DivisionItem[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeItem[]>([]);
   const [workflows, setWorkflows] = useState<ApprovalConfiguration[]>([]);
   const [employees, setEmployees] = useState<BackendEmployee[]>([]);
@@ -123,7 +120,6 @@ export default function LeavePolicies() {
   const [countryName, setCountryName] = useState('');
   const [flag, setFlag] = useState('🏳️');
   const [workingHoursPerDay, setWorkingHoursPerDay] = useState(8);
-  const [divisionAssignment, setDivisionAssignment] = useState('');
   const [weekendDays, setWeekendDays] = useState<number[]>([0, 6]);
 
   // Quota Form State per LeaveType (indexed by stable leaveTypeId or key)
@@ -138,9 +134,8 @@ export default function LeavePolicies() {
     setLoading(true);
     setApiError(null);
     try {
-      const [cRes, dRes, ltRes, wfRes, pRes, empRes, deptRes] = await Promise.all([
+      const [cRes, ltRes, wfRes, pRes, empRes, deptRes] = await Promise.all([
         getCountries(signal),
-        getDivisions(signal),
         getLeaveTypes(signal),
         getApprovalWorkflows(signal),
         getPolicies(signal),
@@ -149,7 +144,6 @@ export default function LeavePolicies() {
       ]);
 
       setCountries(cRes);
-      setDivisions(dRes);
       setLeaveTypes(ltRes);
       setWorkflows(wfRes);
       setPolicies(pRes);
@@ -231,7 +225,6 @@ export default function LeavePolicies() {
     setCountryName(firstC?.name || 'Lebanon');
     setFlag(firstC?.flag || '🇱🇧');
     setWorkingHoursPerDay(8);
-    setDivisionAssignment('');
     setWeekendDays([0, 6]);
 
     const initialQuotas = initializeQuotasState([]);
@@ -253,7 +246,6 @@ export default function LeavePolicies() {
     setCountryName(policy.country || countries[0]?.name || 'Lebanon');
     setFlag(policy.flag || countries[0]?.flag || '🇱🇧');
     setWorkingHoursPerDay(policy.workingHoursPerDay || 8);
-    setDivisionAssignment(policy.divisionAssignment || '');
     setWeekendDays(policy.weekendDays || [0, 6]);
 
     const initialQuotas = initializeQuotasState(policy.leaveQuotas || []);
@@ -414,7 +406,6 @@ export default function LeavePolicies() {
       country: validCountryName,
       flag: flag || '🇱🇧',
       workingHoursPerDay: workingHoursPerDay || 8,
-      divisionAssignment,
       weekendDays: weekendDays || [0, 6],
       leaveQuotas: finalQuotas,
     };
@@ -523,8 +514,7 @@ export default function LeavePolicies() {
                     <div>
                       <h3 className="font-bold text-slate-800 dark:text-white text-base group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{policy.policyName}</h3>
                       <p className="text-xs text-slate-500">
-                        {policy.country} · {policy.countryCode}{' '}
-                        {policy.divisionAssignment ? `· ${policy.divisionAssignment}` : ''}
+                        {policy.country} · {policy.countryCode}
                       </p>
                     </div>
                   </div>
@@ -694,15 +684,6 @@ export default function LeavePolicies() {
                 </div>
 
                 <div className="p-4 bg-slate-50 dark:bg-slate-700/40 rounded-2xl border border-slate-100 dark:border-slate-700">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
-                    Division Assignment
-                  </span>
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                    {divisionAssignment || 'None (All Divisions)'}
-                  </p>
-                </div>
-
-                <div className="p-4 bg-slate-50 dark:bg-slate-700/40 rounded-2xl border border-slate-100 dark:border-slate-700">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-2">
                     Weekend Days
                   </span>
@@ -776,24 +757,6 @@ export default function LeavePolicies() {
                       className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    Division Assignment
-                  </label>
-                  <select
-                    value={divisionAssignment}
-                    onChange={(e) => setDivisionAssignment(e.target.value)}
-                    className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  >
-                    <option value="">None (All Divisions)</option>
-                    {divisions.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div>

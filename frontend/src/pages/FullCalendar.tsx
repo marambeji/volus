@@ -149,6 +149,7 @@ export default function FullCalendar() {
     const activeAbsences = isAllScope && allScopeLoaded ? allAbsences : (absences.length > 0 ? absences : allAbsences);
 
     const matching = activeAbsences.filter((req) => {
+      if ((req.status || '').toUpperCase() !== 'APPROVED') return false;
       if (selectedEmployeeFilter === 'custom' && customEmployeeIds.size > 0) {
         if (!customEmployeeIds.has(req.employeeId)) return false;
       }
