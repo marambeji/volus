@@ -85,6 +85,12 @@ export enum LeaveRequestStatus {
   DELETED_BY_HR = 'DELETED_BY_HR',
 }
 
+export enum DayPortion {
+  FULL_DAY = 'FULL_DAY',
+  FIRST_HALF = 'FIRST_HALF',
+  SECOND_HALF = 'SECOND_HALF',
+}
+
 export enum ApprovalInstanceStatus {
   WAITING = 'WAITING',
   PENDING = 'PENDING',

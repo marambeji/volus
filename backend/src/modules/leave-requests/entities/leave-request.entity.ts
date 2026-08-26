@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { Employee } from '../../employees/entities/employee.entity';
 import { LeaveType } from '../../leave-types/entities/leave-type.entity';
-import { LeaveRequestStatus } from '../../../common/enums';
+import { LeaveRequestStatus, DayPortion } from '../../../common/enums';
 import { ApprovalInstance } from './approval-instance.entity';
 
 @Entity('leave_requests')
@@ -49,6 +49,14 @@ export class LeaveRequest {
     },
   })
   durationDays: number;
+
+  @Column({
+    name: 'day_portion',
+    type: 'enum',
+    enum: DayPortion,
+    default: DayPortion.FULL_DAY,
+  })
+  dayPortion: DayPortion;
 
   @Column({
     type: 'enum',

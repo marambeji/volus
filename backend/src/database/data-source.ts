@@ -24,6 +24,7 @@ import { MakeApprovalWorkflowFieldsOptional1784860000000 } from './migrations/17
 import { DropCheckWorkflowStepSpecificPerson1784870000000 } from './migrations/1784870000000-DropCheckWorkflowStepSpecificPerson';
 import { AddHrDeleteToLeaveRequests1784880000000 } from './migrations/1784880000000-AddHrDeleteToLeaveRequests';
 import { AddHrPermissions1787600000000 } from './migrations/1787600000000-AddHrPermissions';
+import { AddDayPortionToLeaveRequests1787700000000 } from './migrations/1787700000000-AddDayPortionToLeaveRequests';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
@@ -77,6 +78,7 @@ export const AppDataSource = new DataSource({
     DropCheckWorkflowStepSpecificPerson1784870000000,
     AddHrDeleteToLeaveRequests1784880000000,
     AddHrPermissions1787600000000,
+    AddDayPortionToLeaveRequests1787700000000,
   ],
   logging: true,
 });
