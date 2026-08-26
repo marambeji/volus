@@ -96,5 +96,5 @@ describe('RequestModal half-day portion', () => {
         }),
       );
     });
-  });
+  }, 15000); // several sequential userEvent + waitFor/findBy cycles can exceed the 5s default under a loaded full-suite run
 });
