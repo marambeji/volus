@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsBoolean, IsIn, ValidateNested } from 'class-validator';
-import { HR_MODULES, HrModule } from '../../../common/constants/hr-modules';
+import { HR_MODULES } from '../../../common/constants/hr-modules';
+import type { HrModule } from '../../../common/constants/hr-modules';
 
 export class HrPermissionEntryDto {
   @IsIn(HR_MODULES)
