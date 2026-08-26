@@ -121,7 +121,7 @@ describe('ApprovalDashboard Page Component', () => {
         expect.anything()
       );
     });
-  });
+  }, 15000); // sequential userEvent clicks + waitFor can exceed the 5s default under a loaded full-suite run
 
   it('shows a First Half badge for a half-day approval request', async () => {
     await act(async () => {

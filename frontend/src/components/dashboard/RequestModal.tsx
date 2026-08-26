@@ -90,7 +90,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
                 availableBalance: 0,
                 usageYtd: 0,
                 trackingMode: lt.trackingMode,
-                allowsHalfDay: true,
+                allowsHalfDay: lt.key === 'annual',
                 requiresNote: false,
                 requiresDocument: false,
                 requiresPositiveBalance: false,

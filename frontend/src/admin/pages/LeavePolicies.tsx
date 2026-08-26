@@ -85,7 +85,7 @@ const defaultQuotaForType = (typeKey: string, typeId?: string, defaultWorkflowId
     resetDate: '01-01',
     resetDaysCount: 0,
     waitingPeriodDays: 0,
-    allowsHalfDay: keyLower === 'annual' || keyLower === 'compensation',
+    allowsHalfDay: keyLower === 'annual',
     requiresNote: keyLower === 'sick' || keyLower === 'bereavement' || keyLower === 'wedding' || keyLower === 'unpaid',
     requiresDocument: keyLower === 'sick' || keyLower === 'maternity' || keyLower === 'paternity',
     requiresPositiveBalance: keyLower !== 'unpaid' && keyLower !== 'sick',
