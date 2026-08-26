@@ -27,15 +27,6 @@ describe('AdminSidebar', () => {
     expect(screen.queryByText('Employees')).not.toBeInTheDocument();
   });
 
-  it('hides the HR Permissions link for a non-Super-Admin', () => {
-    setUser({ isSuperAdmin: false });
-    render(<MemoryRouter><AdminSidebar isOpen onClose={() => {}} /></MemoryRouter>);
-    expect(screen.queryByText('HR Permissions')).not.toBeInTheDocument();
-  });
-
-  it('shows the HR Permissions link for a Super Admin', () => {
-    setUser({ isSuperAdmin: true });
-    render(<MemoryRouter><AdminSidebar isOpen onClose={() => {}} /></MemoryRouter>);
-    expect(screen.getByText('HR Permissions')).toBeInTheDocument();
-  });
+  // HR Permissions now lives as a card on the Settings page (see
+  // admin/pages/Settings.test.tsx), not as a sidebar nav item.
 });
