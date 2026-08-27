@@ -959,6 +959,7 @@ export class LeaveRequestsService {
         startDate: r.startDate,
         endDate: r.endDate,
         durationDays: Number(r.durationDays),
+        dayPortion: r.dayPortion,
         status: r.status,
       })),
     };
@@ -1006,6 +1007,16 @@ export class LeaveRequestsService {
 
     const amount = request.durationDays;
     const signedAmount = type === LedgerTransactionType.USAGE ? -amount : amount;
+
+    if (leaveType.trackingMode !== 'USAGE_YTD') {
+      await this.leaveBalancesService.bootstrapAvailableBalanceIfNeeded(
+        em,
+        balance,
+        request.employeeId,
+        request.leaveTypeId,
+        year,
+      );
+    }
 
     let resultingBalance = 0;
     if (leaveType.trackingMode === 'USAGE_YTD') {
