@@ -5,6 +5,7 @@ import Badge from '../components/ui/Badge';
 import SlideDrawer from '../admin/components/ui/SlideDrawer';
 import ConfirmModal from '../admin/components/ui/ConfirmModal';
 import ApprovalProgressTimeline from '../components/ui/ApprovalProgressTimeline';
+import { leaveBalancesList, leaveLedgerList, leaveRequestsList, leaveTypesList } from '../data/mockData';
 import { apiFetch } from '../services/apiClient';
 
 function hasPassed(endDate: string): boolean {
@@ -17,9 +18,9 @@ export default function MyInfo() {
   const [selectedLeaveType, setSelectedLeaveType] = useState('annual');
   const [selectedYear, setSelectedYear] = useState('2026');
   const [tableMode, setTableMode] = useState<'requests' | 'ledger'>('requests');
-  const [requests, setRequests] = useState<any[]>([]);
-  const [balances, setBalances] = useState<any[]>([]);
-  const [ledger, setLedger] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>(leaveRequestsList);
+  const [balances, setBalances] = useState<any[]>(leaveBalancesList);
+  const [ledger, setLedger] = useState<any[]>(leaveLedgerList);
   const [profile, setProfile] = useState<any>(null);
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
@@ -358,7 +359,7 @@ export default function MyInfo() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-center font-semibold text-slate-700 whitespace-nowrap">
-                          {req.leaveTypeName || req.leaveType}
+                          {req.leaveTypeName || leaveTypesList.find((t) => t.key === req.leaveType)?.label || req.leaveType}
                         </td>
                         <td className="py-3 px-4 text-center text-slate-500 max-w-[160px] truncate">{req.note || '—'}</td>
                         <td className="py-3 px-4 text-center text-slate-400 whitespace-nowrap">

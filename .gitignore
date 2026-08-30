@@ -24,6 +24,8 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+~$*
+*.tmp
 
 # Env
 .env

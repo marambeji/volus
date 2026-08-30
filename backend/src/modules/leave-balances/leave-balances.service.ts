@@ -6,7 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository, IsNull } from 'typeorm';
+import { DataSource, Repository, IsNull } from 'typeorm';
 import { createHash } from 'crypto';
 import { LeaveBalance } from './entities/leave-balance.entity';
 import { LeaveLedgerEntry } from './entities/leave-ledger-entry.entity';
@@ -21,7 +21,6 @@ import { LeaveTrackingMode, LedgerTransactionType, EmployeeStatus, LeavePolicySt
 import { LeaveRequest } from '../leave-requests/entities/leave-request.entity';
 import { LeavePolicy } from '../policies/entities/leave-policy.entity';
 import { EmployeePolicyAssignment } from '../employees/entities/employee-policy-assignment.entity';
-import { LeaveRule } from '../policies/entities/leave-rule.entity';
 
 
 @Injectable()
@@ -44,56 +43,6 @@ export class LeaveBalancesService {
     const raw = `${dto.employeeId}:${dto.leaveTypeId}:${dto.year}:${normAmount}:${normReason}`;
     // SHA-256 hex digest is always exactly 64 chars — fits VARCHAR(64)
     return createHash('sha256').update(raw).digest('hex');
-  }
-
-  // The read-side summary (below) assumes a fresh AVAILABLE_BALANCE type is
-  // fully entitled before its first INITIAL_GRANT/ACCRUAL ledger entry exists.
-  // Debits (usage, manual adjustment) must honor that same assumption before
-  // touching the stored column, or they silently drain it from 0 instead of
-  // from the entitlement — see 2026-08-27 balance-goes-negative report.
-  async bootstrapAvailableBalanceIfNeeded(
-    em: EntityManager,
-    balance: LeaveBalance,
-    employeeId: string,
-    leaveTypeId: string,
-    year: number,
-  ): Promise<void> {
-    const priorEntries = await em.find(LeaveLedgerEntry, {
-      where: { employeeId, leaveTypeId },
-    });
-    const alreadyGranted = priorEntries.some(
-      (e) =>
-        (e.transactionType === LedgerTransactionType.INITIAL_GRANT ||
-          e.transactionType === LedgerTransactionType.ACCRUAL) &&
-        new Date(e.transactionDate).getFullYear() === year,
-    );
-    if (alreadyGranted) return;
-
-    const assignment = await em.findOne(EmployeePolicyAssignment, {
-      where: { employeeId, isActive: true },
-    });
-    if (!assignment) return;
-
-    const rule = await em.findOne(LeaveRule, {
-      where: { policyId: assignment.leavePolicyId, leaveTypeId },
-    });
-    const entitlement = Number(rule?.entitlementDays) || 0;
-    if (entitlement <= 0) return;
-
-    balance.availableBalance = entitlement;
-
-    const grantEntry = em.create(LeaveLedgerEntry, {
-      balanceId: balance.id,
-      employeeId,
-      leaveTypeId,
-      transactionType: LedgerTransactionType.INITIAL_GRANT,
-      signedAmount: entitlement,
-      resultingBalance: entitlement,
-      reason: 'Bootstrapped initial grant (retroactive)',
-      referenceType: 'LEAVE_POLICY',
-      referenceId: assignment.leavePolicyId,
-    });
-    await em.save(grantEntry);
   }
 
   // ── Calculate Balances Engine ───────────────────────────────────────────────
@@ -495,16 +444,6 @@ export class LeaveBalancesService {
             },
             lock: { mode: 'pessimistic_write' },
           });
-        }
-
-        if (leaveType.trackingMode !== LeaveTrackingMode.USAGE_YTD) {
-          await this.bootstrapAvailableBalanceIfNeeded(
-            em,
-            balance!,
-            dto.employeeId,
-            dto.leaveTypeId,
-            dto.year,
-          );
         }
 
         let newBalance = 0;

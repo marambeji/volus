@@ -8,8 +8,6 @@ import { LeaveBalance } from './entities/leave-balance.entity';
 import { LeaveLedgerEntry } from './entities/leave-ledger-entry.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { LeaveType } from '../leave-types/entities/leave-type.entity';
-import { EmployeePolicyAssignment } from '../employees/entities/employee-policy-assignment.entity';
-import { LeaveRule } from '../policies/entities/leave-rule.entity';
 import {
   LeaveTrackingMode,
   LedgerTransactionType,
@@ -116,7 +114,6 @@ describe('LeaveBalancesService Unit Tests', () => {
           findOne: jest
             .fn()
             .mockResolvedValue({ id: 'b1', availableBalance: 2, usedYtd: 0 }),
-          find: jest.fn().mockResolvedValue([]),
           save: jest.fn(),
           create: jest.fn(),
         }),
@@ -175,7 +172,6 @@ describe('LeaveBalancesService Unit Tests', () => {
       findOne: jest
         .fn()
         .mockResolvedValue({ id: 'b1', availableBalance: 10, usedYtd: 0 }),
-      find: jest.fn().mockResolvedValue([]),
       save: jest.fn((obj: Record<string, unknown>) =>
         Promise.resolve({ id: 'saved-id', ...obj }),
       ),
@@ -203,50 +199,6 @@ describe('LeaveBalancesService Unit Tests', () => {
     expect(result.transactionType).toBe(
       LedgerTransactionType.MANUAL_ADJUSTMENT,
     );
-  });
-
-  it('bootstraps the stored balance to the policy entitlement before debiting, when no INITIAL_GRANT/ACCRUAL ledger entry exists yet', async () => {
-    // Regression: the read-side summary already assumes a fresh balance is
-    // fully entitled before its first ledger entry; a debit that skipped this
-    // assumption and read the raw (still-0) column drove it negative even
-    // though the displayed "available" balance was positive.
-    ledgerRepo.findOne.mockResolvedValue(null);
-    employeeRepo.findOne.mockResolvedValue({ id: 'emp1' });
-    leaveTypeRepo.findOne.mockResolvedValue({
-      id: 'lt1',
-      trackingMode: LeaveTrackingMode.AVAILABLE_BALANCE,
-    });
-
-    const balance = { id: 'b1', availableBalance: 0, usedYtd: 0 };
-    const mockEm = {
-      findOne: jest.fn((entity: unknown) => {
-        if (entity === LeaveBalance) return Promise.resolve(balance);
-        if (entity === EmployeePolicyAssignment)
-          return Promise.resolve({ id: 'epa1', leavePolicyId: 'policy1', isActive: true });
-        if (entity === LeaveRule)
-          return Promise.resolve({ entitlementDays: 25 });
-        return Promise.resolve(null);
-      }),
-      find: jest.fn().mockResolvedValue([]), // no prior INITIAL_GRANT/ACCRUAL
-      save: jest.fn((obj: Record<string, unknown>) => Promise.resolve(obj)),
-      create: jest.fn((_entity: unknown, obj: Record<string, unknown>) => obj),
-    };
-
-    dataSource.transaction.mockImplementation(
-      (cb: (em: typeof mockEm) => unknown) => cb(mockEm),
-    );
-
-    const result = await service.adjust({
-      employeeId: 'emp1',
-      leaveTypeId: 'lt1',
-      year: 2026,
-      amount: -2,
-      reason: 'Approved leave request',
-    });
-
-    // Bootstrapped to entitlement (25) before the -2 debit, not the raw 0.
-    expect(balance.availableBalance).toBe(23);
-    expect(result.resultingBalance).toBe(23);
   });
 
   describe('runAccruals', () => {

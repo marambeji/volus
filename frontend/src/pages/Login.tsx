@@ -7,7 +7,7 @@ interface LoginProps {
 
 export default function Login({ onLogin }: LoginProps) {
   const [step, setStep] = useState<'landing' | 'form'>('landing');
-  const [email, setEmail] = useState('salim@novelus.com');
+  const [email, setEmail] = useState('gabriel@novelus.com');
   const [password, setPassword] = useState('admin');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -199,8 +199,8 @@ export default function Login({ onLogin }: LoginProps) {
           {/* Tip banner */}
           <div className="mt-6 text-[10px] text-slate-500 border-t border-slate-800/60 pt-4 w-full text-center space-y-1.5">
             <p className="text-slate-400 font-bold mb-1">Click below to auto-fill:</p>
-            <div onClick={() => fillCredentials('salim@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
-              💡 <strong>Employee</strong>: <span className="font-mono text-cyan-400 underline">salim@novelus.com</span>
+            <div onClick={() => fillCredentials('gabriel@novelus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
+              💡 <strong>Employee</strong>: <span className="font-mono text-cyan-400 underline">gabriel@novelus.com</span>
             </div>
             <div onClick={() => fillCredentials('maram@volus.com')} className="cursor-pointer hover:bg-slate-800/40 p-1.5 rounded transition-all border border-slate-800/40">
               💼 <strong>Manager</strong>: <span className="font-mono text-cyan-400 underline">maram@volus.com</span>

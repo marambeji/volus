@@ -171,7 +171,7 @@ export default function LeaveTracking() {
     approved: filteredRequests.filter(r => r.status === 'APPROVED').length,
     pending: filteredRequests.filter(r => r.status === 'PENDING').length,
     rejected: filteredRequests.filter(r => r.status === 'REJECTED').length,
-    cancelled: filteredRequests.filter(r => r.status === 'CANCELLED').length,
+    cancelled: filteredRequests.filter(r => r.status === 'CANCELLED' || r.status === 'DELETED_BY_HR').length,
   };
 
   // Pagination

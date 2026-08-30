@@ -33,20 +33,20 @@ export default function WhosOut() {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-        // Filter requests active today
+        // Filter requests active today (only APPROVED)
         const activeToday = allRequests.filter((r) => {
-          const isApp = r.currentStatus === 'APPROVED' || r.status === 'APPROVED' || r.currentStatus === 'PENDING' || r.status === 'PENDING';
+          const isApproved = r.currentStatus === 'APPROVED' || r.status === 'APPROVED';
           const s = r.startDate ? r.startDate.split('T')[0] : '';
           const e = r.endDate ? r.endDate.split('T')[0] : '';
-          return isApp && s <= todayStr && e >= todayStr;
+          return isApproved && s <= todayStr && e >= todayStr;
         });
 
-        // Filter requests active tomorrow
+        // Filter requests active tomorrow (only APPROVED)
         const activeTomorrow = allRequests.filter((r) => {
-          const isApp = r.currentStatus === 'APPROVED' || r.status === 'APPROVED' || r.currentStatus === 'PENDING' || r.status === 'PENDING';
+          const isApproved = r.currentStatus === 'APPROVED' || r.status === 'APPROVED';
           const s = r.startDate ? r.startDate.split('T')[0] : '';
           const e = r.endDate ? r.endDate.split('T')[0] : '';
-          return isApp && s <= tomorrowStr && e >= tomorrowStr;
+          return isApproved && s <= tomorrowStr && e >= tomorrowStr;
         });
 
         const mappedToday = activeToday.map((r, idx) => ({

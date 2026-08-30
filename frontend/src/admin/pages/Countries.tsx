@@ -245,56 +245,46 @@ export default function Countries() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700/80">
-                  <th className="px-6 py-4">Flag</th>
-                  <th className="px-6 py-4">Country Name</th>
-                  <th className="px-6 py-4">ISO Code</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                {filtered.map((c) => (
-                  <tr key={c.id} className="hover:bg-violet-50/30 dark:hover:bg-slate-700/30 transition-colors group">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {renderFlag(c.code, 'md')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-800 dark:text-slate-100 text-sm">
-                      {c.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 text-xs font-mono font-bold px-2.5 py-1 rounded-lg border border-violet-200/60 dark:border-violet-800/60 shadow-2xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((c) => (
+              <div
+                key={c.id}
+                className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xs overflow-hidden flex flex-col transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-violet-200 dark:hover:border-violet-900"
+              >
+                {/* Top accent bar with flag */}
+                <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="text-4xl">{renderFlag(c.code, 'lg')}</div>
+                    <div>
+                      <h3 className="text-lg font-black text-white leading-tight">{c.name}</h3>
+                      <span className="inline-flex items-center gap-1 bg-white/20 text-white text-xs font-mono font-bold px-2 py-0.5 rounded-lg mt-1">
                         {c.code}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                        {canManage && (
-                          <>
-                            <button
-                              onClick={() => openEdit(c)}
-                              className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/50 rounded-xl transition-all cursor-pointer"
-                              title="Edit Country"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => setDeleteItem(c)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-all cursor-pointer"
-                              title="Delete Country"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card body with actions */}
+                {canManage && (
+                  <div className="p-4 flex items-center justify-end gap-2 bg-slate-50/50 dark:bg-slate-900/40">
+                    <button
+                      onClick={() => openEdit(c)}
+                      className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/50 rounded-xl transition-all cursor-pointer"
+                      title="Edit Country"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteItem(c)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-all cursor-pointer"
+                      title="Delete Country"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

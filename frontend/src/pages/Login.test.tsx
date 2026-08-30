@@ -42,7 +42,7 @@ describe('Login Page Component', () => {
     await user.click(employeeAutoFill);
 
     const emailInput = screen.getByPlaceholderText(/Username/i) as HTMLInputElement;
-    expect(emailInput.value).toBe('salim@novelus.com');
+    expect(emailInput.value).toBe('gabriel@novelus.com');
   });
 
   it('validates submission and authenticates successfully', async () => {
