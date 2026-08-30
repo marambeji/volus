@@ -72,11 +72,11 @@ export default function EmployeeList() {
         const names = new Set<string>();
 
         all.forEach((r: any) => {
-          const isActive = r.status === 'APPROVED' || r.currentStatus === 'APPROVED'
-            || r.status === 'PENDING' || r.currentStatus === 'PENDING';
+          // Only show employees as "On Leave" if their request is APPROVED
+          const isApproved = r.status === 'APPROVED' || r.currentStatus === 'APPROVED';
           const s = (r.startDate || '').split('T')[0];
           const e = (r.endDate || '').split('T')[0];
-          if (isActive && s <= todayStr && e >= todayStr) {
+          if (isApproved && s <= todayStr && e >= todayStr) {
             if (r.employee?.id)    ids.add(String(r.employee.id));
             if (r.employeeId)      ids.add(String(r.employeeId));
             if (r.employeeName)    names.add(String(r.employeeName).toLowerCase().trim());
@@ -166,18 +166,47 @@ export default function EmployeeList() {
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
-    
+
     if (!form.name.trim()) newErrors.name = 'Full name is required';
-    
+
     if (!form.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
-    
+
+    // Phone validation - required with country-specific format
+    if (!form.phone?.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else {
+      const phoneValidationRules: Record<string, { pattern: RegExp; format: string; example: string }> = {
+        'TN': { pattern: /^\+216\d{8}$/, format: '+216 followed by 8 digits', example: '+21612345678' },
+        'LB': { pattern: /^\+961\d{7,8}$/, format: '+961 followed by 7-8 digits', example: '+9611234567' },
+        'AE': { pattern: /^\+971\d{8,9}$/, format: '+971 followed by 8-9 digits', example: '+971501234567' },
+        'SA': { pattern: /^\+966\d{9}$/, format: '+966 followed by 9 digits', example: '+966501234567' },
+        'GB': { pattern: /^\+44\d{10}$/, format: '+44 followed by 10 digits', example: '+441234567890' },
+        'FR': { pattern: /^\+33\d{9}$/, format: '+33 followed by 9 digits', example: '+33612345678' },
+        'CA': { pattern: /^\+1\d{10}$/, format: '+1 followed by 10 digits', example: '+14165551234' },
+        'US': { pattern: /^\+1\d{10}$/, format: '+1 followed by 10 digits', example: '+14165551234' },
+      };
+
+      const selectedCountry = countriesList.find(c => c.code === form.countryCode);
+      const countryCode = selectedCountry?.code || form.countryCode;
+
+      if (countryCode && phoneValidationRules[countryCode]) {
+        const rule = phoneValidationRules[countryCode];
+        if (!rule.pattern.test(form.phone.trim())) {
+          newErrors.phone = `Invalid format for ${selectedCountry?.name || countryCode}. Expected: ${rule.format} (e.g., ${rule.example})`;
+        }
+      } else if (!/^\+\d{1,4}\d{7,15}$/.test(form.phone.trim())) {
+        // Generic international format validation if country not in specific rules
+        newErrors.phone = 'Phone must start with + followed by country code and number (e.g., +1234567890)';
+      }
+    }
+
     if (!form.position.trim()) newErrors.position = 'Position is required';
     if (!form.hireDate) newErrors.hireDate = 'Hire date is required';
-    
+
     // Country is required when creating; when editing it's optional (keeps existing)
     // unless it was previously deleted and the user wants to reassign one.
     if (!editEmp && !form.countryCode) newErrors.country = 'Country is required';
@@ -431,25 +460,197 @@ export default function EmployeeList() {
       {/* Add/Edit Form Drawer */}
       <SlideDrawer isOpen={formOpen} onClose={() => setFormOpen(false)} title={editEmp ? 'Edit Employee' : 'Add New Employee'} subtitle={editEmp ? `Editing ${editEmp.name}` : 'Fill in employee details'}>
         <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+          {/* Personal Information Section */}
           <div className="grid grid-cols-2 gap-4">
-            {[
-              { label: 'Full Name *', key: 'name', type: 'text' },
-              { label: 'Email *',     key: 'email', type: 'email' },
-              { label: 'Phone',     key: 'phone', type: 'text' },
-              { label: 'Position (Job Title) *',  key: 'position', type: 'text' },
-              { label: 'Hire Date *', key: 'hireDate', type: 'date' },
-            ].map(f => (
-              <div key={f.key} className={f.key === 'name' ? 'col-span-2' : ''}>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{f.label}</label>
-                <input type={f.type} value={(form as any)[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${errors[f.key] ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'} rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`} />
-                {errors[f.key] && (
-                  <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors[f.key]}</p>
-                )}
+            {/* Full Name - spans 2 columns */}
+            <div className="col-span-2">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Name *</label>
+              <input
+                type="text"
+                value={form.name || ''}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${errors.name ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'} rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+              />
+              {errors.name && (
+                <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>
+              )}
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email *</label>
+              <input
+                type="email"
+                value={form.email || ''}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${errors.email ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'} rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+              />
+              {errors.email && (
+                <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.email}</p>
+              )}
+            </div>
+
+            {/* Position */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Position (Job Title) *</label>
+              <input
+                type="text"
+                value={form.position || ''}
+                onChange={e => setForm(p => ({ ...p, position: e.target.value }))}
+                className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${errors.position ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'} rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+              />
+              {errors.position && (
+                <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.position}</p>
+              )}
+            </div>
+
+            {/* Hire Date */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hire Date *</label>
+              <input
+                type="date"
+                value={form.hireDate || ''}
+                onChange={e => setForm(p => ({ ...p, hireDate: e.target.value }))}
+                className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${errors.hireDate ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'} rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+              />
+              {errors.hireDate && (
+                <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.hireDate}</p>
+              )}
+            </div>
+
+            {/* Country */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Country *</label>
+              <select
+                value={form.countryCode}
+                onChange={e => {
+                  const selectedCode = e.target.value;
+                  const foundCountry = countriesList.find(c => c.code === selectedCode);
+                  setForm(p => ({
+                    ...p,
+                    country: foundCountry?.name ?? selectedCode,
+                    countryCode: selectedCode
+                  }));
+                }}
+                className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 ${errors.country ? 'border-red-400' : 'border-slate-200 dark:border-slate-600'}`}
+              >
+                <option value="">-- Select a country --</option>
+                {countriesList.map(c => <option key={c.id} value={c.code}>{c.name}</option>)}
+              </select>
+              {errors.country && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.country}</p>}
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone *</label>
+              <div className="relative">
+                {form.countryCode && (() => {
+                  const countryDialCodes: Record<string, string> = {
+                    'TN': '+216',
+                    'LB': '+961',
+                    'AE': '+971',
+                    'SA': '+966',
+                    'GB': '+44',
+                    'FR': '+33',
+                    'CA': '+1',
+                    'US': '+1',
+                  };
+                  const dialCode = countryDialCodes[form.countryCode];
+                  if (dialCode) {
+                    return (
+                      <div className="absolute left-3 top-2.5 text-sm font-semibold text-slate-500 dark:text-slate-400 pointer-events-none">
+                        {dialCode}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+                <input
+                  type="text"
+                  value={(() => {
+                    // Extract phone number without country code for display
+                    const countryDialCodes: Record<string, string> = {
+                      'TN': '+216',
+                      'LB': '+961',
+                      'AE': '+971',
+                      'SA': '+966',
+                      'GB': '+44',
+                      'FR': '+33',
+                      'CA': '+1',
+                      'US': '+1',
+                    };
+                    const dialCode = countryDialCodes[form.countryCode];
+                    if (dialCode && form.phone?.startsWith(dialCode)) {
+                      return form.phone.substring(dialCode.length).trim();
+                    }
+                    return form.phone || '';
+                  })()}
+                  onChange={e => {
+                    const countryDialCodes: Record<string, string> = {
+                      'TN': '+216',
+                      'LB': '+961',
+                      'AE': '+971',
+                      'SA': '+966',
+                      'GB': '+44',
+                      'FR': '+33',
+                      'CA': '+1',
+                      'US': '+1',
+                    };
+                    const dialCode = countryDialCodes[form.countryCode] || '';
+                    const phoneNumber = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                    setForm(p => ({ ...p, phone: dialCode + phoneNumber }));
+                  }}
+                  placeholder={(() => {
+                    const phonePlaceholders: Record<string, string> = {
+                      'TN': '12345678',
+                      'LB': '1234567',
+                      'AE': '501234567',
+                      'SA': '501234567',
+                      'GB': '1234567890',
+                      'FR': '612345678',
+                      'CA': '4165551234',
+                      'US': '4165551234',
+                    };
+                    return phonePlaceholders[form.countryCode] || 'Select country first';
+                  })()}
+                  className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${errors.phone ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'} rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 ${form.countryCode ? 'pl-16' : ''}`}
+                  disabled={!form.countryCode}
+                />
               </div>
-            ))}
+              {errors.phone && (
+                <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.phone}</p>
+              )}
+              {!errors.phone && form.countryCode && (
+                <p className="text-slate-400 text-[9px] mt-1">
+                  {(() => {
+                    const formats: Record<string, string> = {
+                      'TN': 'Enter 8 digits',
+                      'LB': 'Enter 7-8 digits',
+                      'AE': 'Enter 8-9 digits',
+                      'SA': 'Enter 9 digits',
+                      'GB': 'Enter 10 digits',
+                      'FR': 'Enter 9 digits',
+                      'CA': 'Enter 10 digits',
+                      'US': 'Enter 10 digits',
+                    };
+                    return formats[form.countryCode] || 'Enter phone number';
+                  })()}
+                </p>
+              )}
+            </div>
+
+            {/* Gender - placed next to Phone */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gender</label>
+              <select value={form.gender ?? ''} onChange={e => setForm(p => ({ ...p, gender: (e.target.value || undefined) as any }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="">Not specified</option>
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+              </select>
+            </div>
           </div>
 
+          {/* Work Information Section */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">User Role</label>
@@ -459,7 +660,7 @@ export default function EmployeeList() {
                 <option value="HR Admin">HR Admin</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department</label>
               <select value={form.department} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
@@ -477,27 +678,6 @@ export default function EmployeeList() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Country</label>
-              <select 
-                value={form.countryCode} 
-                onChange={e => {
-                  const selectedCode = e.target.value;
-                  const foundCountry = countriesList.find(c => c.code === selectedCode);
-                  setForm(p => ({ 
-                    ...p, 
-                    country: foundCountry?.name ?? selectedCode,
-                    countryCode: selectedCode
-                  }));
-                }} 
-                className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 ${errors.country ? 'border-red-400' : 'border-slate-200 dark:border-slate-600'}`}
-              >
-                <option value="">-- Select a country --</option>
-                {countriesList.map(c => <option key={c.id} value={c.code}>{c.name}</option>)}
-              </select>
-              {errors.country && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.country}</p>}
-            </div>
-
-            <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Leave Policy</label>
               <select value={form.policyId || ''} onChange={e => setForm(p => ({ ...p, policyId: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
                 <option value="">No Policy Assigned</option>
@@ -511,15 +691,6 @@ export default function EmployeeList() {
                 <option value="full_time">Full Time</option>
                 <option value="part_time">Part Time</option>
                 <option value="remote">Remote</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gender</label>
-              <select value={form.gender ?? ''} onChange={e => setForm(p => ({ ...p, gender: (e.target.value || undefined) as any }))} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="">Not specified</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
               </select>
             </div>
 

@@ -155,6 +155,11 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
   const maxRequestDays = selectedLeaveConfig?.maxRequestDays;
   const maxConsecutiveDays = selectedLeaveConfig?.maxConsecutiveDays;
 
+  // Skip note requirement for common leave types where it's typically optional
+  const optionalNoteTypes = ['ANNUAL', 'COMPENSATION', 'OVERTIME'];
+  const leaveCode = selectedLeaveConfig?.code?.toUpperCase() || '';
+  const isNoteRequired = requiresNote && !optionalNoteTypes.includes(leaveCode);
+
   // Helper to generate dates between start and end
   useEffect(() => {
     if (!startDate || !endDate) {
@@ -245,7 +250,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
         }
       }
       if (!blockingError) {
-        if (requiresNote && !reason.trim()) {
+        if (isNoteRequired && !reason.trim()) {
           blockingError = `A note is required for this leave type.`;
         }
       }
@@ -276,7 +281,7 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
         }
       }
       if (!blockingError) {
-        if (requiresNote && !reason.trim()) {
+        if (isNoteRequired && !reason.trim()) {
           blockingError = `A note is required for this leave type.`;
         }
       }
@@ -811,15 +816,15 @@ export default function RequestModal({ isOpen, onClose }: RequestModalProps) {
 
                   <div>
                     <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                      Note {requiresNote ? '*' : '(Optional)'}
+                      Note {isNoteRequired ? '*' : ''}
                     </label>
                     <textarea
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                       rows={3}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200/60 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
-                      placeholder={requiresNote ? 'Please provide a reason...' : 'Add any comments...'}
-                      required={requiresNote}
+                      placeholder={isNoteRequired ? 'Please provide a reason...' : 'Please provide a reason...'}
+                      required={isNoteRequired}
                     />
                   </div>
 

@@ -20,6 +20,7 @@ const emptyForm = (defaultCountryId = '') => ({
   date: '',
   countryId: defaultCountryId,
   recurring: true,
+  isGlobal: false,
 });
 
 const MONTH_NAMES = [
@@ -121,6 +122,7 @@ export default function PublicHolidays() {
       date:      h.date,
       countryId: h.countryId || countries.find(c => c.name === h.country)?.id || '',
       recurring: h.recurring,
+      isGlobal:  false,
     });
     setEditHolidayItem(h);
     setErrors({});
@@ -131,7 +133,7 @@ export default function PublicHolidays() {
     const e: Record<string, string> = {};
     if (!form.name.trim())   e.name      = 'Holiday name is required';
     if (!form.date)          e.date      = 'Date is required';
-    if (!form.countryId)     e.countryId = 'Country selection is required';
+    if (!form.isGlobal && !form.countryId) e.countryId = 'Country selection is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -145,8 +147,17 @@ export default function PublicHolidays() {
         await updateHoliday(editHolidayItem.id, form, countries);
         setToast('Holiday updated successfully');
       } else {
-        await createHoliday(form, countries);
-        setToast('Holiday created successfully');
+        if (form.isGlobal) {
+          // Create holiday for all countries
+          const createPromises = countries.map(country =>
+            createHoliday({ ...form, countryId: country.id }, countries)
+          );
+          await Promise.all(createPromises);
+          setToast(`Global holiday created in ${countries.length} countries`);
+        } else {
+          await createHoliday(form, countries);
+          setToast('Holiday created successfully');
+        }
       }
       setTimeout(() => setToast(null), 3000);
       setFormOpen(false);
@@ -180,7 +191,7 @@ export default function PublicHolidays() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto flex flex-col gap-6 relative">
+    <div className="max-w-7xl mx-auto p-6 flex flex-col gap-6 relative">
 
       {/* Toast */}
       {toast && (
@@ -296,7 +307,7 @@ export default function PublicHolidays() {
               <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or add a new holiday.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filtered.map(h => {
                 const d = new Date(h.date);
                 const isValid = !isNaN(d.getTime());
@@ -416,27 +427,47 @@ export default function PublicHolidays() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                Date *
-              </label>
-              <input
-                type="date"
-                required
-                value={form.date}
-                onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
-                className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
-                  errors.date ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
-                } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
-              />
-              {errors.date && (
-                <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1">
-                  <AlertCircle size={10} /> {errors.date}
-                </p>
-              )}
-            </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Date *
+            </label>
+            <input
+              type="date"
+              required
+              value={form.date}
+              onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+              className={`w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700 border ${
+                errors.date ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
+              } rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500`}
+            />
+            {errors.date && (
+              <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1">
+                <AlertCircle size={10} /> {errors.date}
+              </p>
+            )}
+          </div>
 
+          {!editHolidayItem && (
+            <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 p-4 rounded-xl border border-blue-200/50 dark:border-blue-800/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Globe2 size={18} className="text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Global Holiday</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">Apply to all {countries.length} countries</span>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={form.isGlobal}
+                onChange={e => setForm(p => ({ ...p, isGlobal: e.target.checked }))}
+                className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+              />
+            </div>
+          )}
+
+          {!form.isGlobal && (
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                 Country *
@@ -451,7 +482,7 @@ export default function PublicHolidays() {
                 ))}
               </select>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200/50 dark:border-slate-700 mt-2">
             <div className="flex flex-col">
