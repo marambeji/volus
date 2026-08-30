@@ -1,0 +1,14 @@
+{
+  "name": "volus-salim-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NOVELUS HR Leave Management Platform Monorepo Workspace",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend start:dev",
+    "build": "npm --prefix frontend run build && npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "npm --prefix backend run build"
+  }
+}
