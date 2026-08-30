@@ -265,7 +265,12 @@ export default function AdminHeader({ onMenuClick, onLogout }: { onMenuClick: ()
         <div className="flex items-center gap-2.5 pl-3 border-l border-slate-200 dark:border-slate-700">
           <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-black">HR</div>
           <div className="hidden sm:block">
-            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">HR Admin</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">HR Admin</p>
+              <span className="px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[9px] font-black uppercase tracking-wider rounded-full shadow-sm">
+                Final Version
+              </span>
+            </div>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Administrator</p>
           </div>
         </div>
