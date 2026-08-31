@@ -39,7 +39,14 @@ interface CalendarAbsence {
   startDate: string;
   endDate: string;
   durationDays: number;
+  dayPortion?: string;
   status: string;
+}
+
+function dayPortionLabel(dayPortion?: string): string | null {
+  if (dayPortion === 'FIRST_HALF') return 'First Half';
+  if (dayPortion === 'SECOND_HALF') return 'Second Half';
+  return null;
 }
 
 function toDateStr(d: Date): string {
@@ -75,7 +82,7 @@ export default function FullCalendar() {
   // Modal state for viewing all absences on a specific date
   const [activeDayModal, setActiveDayModal] = useState<{
     dateString: string;
-    absences: Array<{ employeeName: string; leaveLabel: string; color: string }>;
+    absences: Array<{ employeeName: string; leaveLabel: string; color: string; dayPortion?: string }>;
   } | null>(null);
 
   // Load initial backend data (defaults to My Circle / Team scope)
@@ -160,7 +167,7 @@ export default function FullCalendar() {
     });
 
     const seen = new Set<string>();
-    const deduplicated: Array<{ employeeName: string; leaveLabel: string; color: string }> = [];
+    const deduplicated: Array<{ employeeName: string; leaveLabel: string; color: string; dayPortion?: string }> = [];
 
     for (const req of matching) {
       const empName = req.employeeName || 'Employee';
@@ -168,10 +175,10 @@ export default function FullCalendar() {
         (lt) => lt.id === req.leaveTypeId || lt.label.toLowerCase() === (req.leaveTypeName || '').toLowerCase()
       );
       const leaveLabel = req.leaveTypeName || typeItem?.label || 'Leave';
-      const key = `${empName.toLowerCase()}_${leaveLabel.toLowerCase()}`;
+      const key = `${empName.toLowerCase()}_${leaveLabel.toLowerCase()}_${req.dayPortion || ''}`;
       if (!seen.has(key)) {
         seen.add(key);
-        deduplicated.push({ employeeName: empName, leaveLabel, color: getTypeColor(typeItem?.key || '', req.leaveTypeName || '', typeItem?.color) });
+        deduplicated.push({ employeeName: empName, leaveLabel, color: getTypeColor(typeItem?.key || '', req.leaveTypeName || '', typeItem?.color), dayPortion: req.dayPortion });
       }
     }
     return deduplicated;
@@ -671,9 +678,16 @@ export default function FullCalendar() {
                     <span className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-xs" style={{ backgroundColor: abs.color }} />
                     <span className="text-sm font-bold text-slate-800">{abs.employeeName}</span>
                   </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200 shadow-2xs">
-                    {abs.leaveLabel}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200 shadow-2xs">
+                      {abs.leaveLabel}
+                    </span>
+                    {dayPortionLabel(abs.dayPortion) && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 px-1.5 py-1 rounded-lg">
+                        {dayPortionLabel(abs.dayPortion)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
