@@ -150,6 +150,9 @@ export default function LeaveRequests() {
         <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-300 rounded-xl shadow-lg transition-all">
           <Check size={16} />
           <span className="text-xs font-semibold">{toast}</span>
+          <button onClick={() => setToast(null)} className="ml-2 p-1 rounded-lg text-emerald-600 hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-800/50 cursor-pointer transition-colors" title="Close">
+            <X size={14} />
+          </button>
         </div>
       )}
 
